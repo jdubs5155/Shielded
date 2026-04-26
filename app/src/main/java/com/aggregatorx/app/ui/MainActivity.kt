@@ -1,0 +1,275 @@
+package com.aggregatorx.app.ui
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.aggregatorx.app.ui.screens.*
+import com.aggregatorx.app.ui.theme.*
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            AggregatorXTheme {
+                MainScreen()
+            }
+        }
+    }
+}
+
+sealed class Screen(
+    val route: String,
+    val title: String,
+    val selectedIcon: ImageVector,
+    val unselectedIcon: ImageVector
+) {
+    object Search : Screen(
+        "search",
+        "Search",
+        Icons.Filled.Search,
+        Icons.Outlined.Search
+    )
+    object Providers : Screen(
+        "providers",
+        "Providers",
+        Icons.Filled.Dns,
+        Icons.Outlined.Dns
+    )
+    object Settings : Screen(
+        "settings",
+        "Settings",
+        Icons.Filled.Settings,
+        Icons.Outlined.Settings
+    )
+}
+
+@Composable
+fun MainScreen() {
+    val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
+    
+    val screens = listOf(
+        Screen.Search,
+        Screen.Providers,
+        Screen.Settings
+    )
+    
+    Scaffold(
+        containerColor = DarkBackground,
+        bottomBar = {
+            FuturisticBottomBar(
+                screens = screens,
+                currentDestination = currentDestination,
+                onNavigate = { screen ->
+                    navController.navigate(screen.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        NavHost(
+            navController = navController,
+            startDestination = Screen.Search.route,
+            modifier = Modifier.padding(paddingValues)
+        ) {
+            composable(
+                Screen.Search.route,
+                enterTransition = {
+                    fadeIn(animationSpec = tween(300)) + 
+                    slideInHorizontally(initialOffsetX = { -it / 4 })
+                },
+                exitTransition = {
+                    fadeOut(animationSpec = tween(300)) +
+                    slideOutHorizontally(targetOffsetX = { -it / 4 })
+                }
+            ) {
+                SearchScreen()
+            }
+            
+            composable(
+                Screen.Providers.route,
+                enterTransition = {
+                    fadeIn(animationSpec = tween(300)) +
+                    slideInHorizontally(initialOffsetX = { 
+                        if (currentDestination?.route == Screen.Search.route) it / 4 else -it / 4 
+                    })
+                },
+                exitTransition = {
+                    fadeOut(animationSpec = tween(300)) +
+                    slideOutHorizontally(targetOffsetX = { 
+                        if (currentDestination?.route == Screen.Settings.route) -it / 4 else it / 4 
+                    })
+                }
+            ) {
+                ProvidersScreen()
+            }
+            
+            composable(
+                Screen.Settings.route,
+                enterTransition = {
+                    fadeIn(animationSpec = tween(300)) +
+                    slideInHorizontally(initialOffsetX = { it / 4 })
+                },
+                exitTransition = {
+                    fadeOut(animationSpec = tween(300)) +
+                    slideOutHorizontally(targetOffsetX = { it / 4 })
+                }
+            ) {
+                SettingsScreen()
+            }
+        }
+    }
+}
+
+@Composable
+fun FuturisticBottomBar(
+    screens: List<Screen>,
+    currentDestination: androidx.navigation.NavDestination?,
+    onNavigate: (Screen) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color.Transparent, DarkBackground)
+                )
+            )
+            .padding(horizontal = 24.dp, vertical = 12.dp)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(72.dp),
+            shape = RoundedCornerShape(36.dp),
+            color = DarkCard.copy(alpha = 0.95f),
+            tonalElevation = 8.dp,
+            shadowElevation = 16.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                screens.forEach { screen ->
+                    val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
+                    
+                    FuturisticNavItem(
+                        screen = screen,
+                        selected = selected,
+                        onClick = { onNavigate(screen) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FuturisticNavItem(
+    screen: Screen,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val animatedWeight by animateFloatAsState(
+        targetValue = if (selected) 1.5f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessLow)
+    )
+    
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (selected) 0.5f else 0f,
+        animationSpec = tween(300)
+    )
+    
+    val iconColor by animateColorAsState(
+        targetValue = if (selected) CyberCyan else TextTertiary,
+        animationSpec = tween(300)
+    )
+    
+    Box(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(80.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .drawBehind {
+                if (selected) {
+                    drawRoundRect(
+                        color = CyberCyan,
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(20.dp.toPx()),
+                        alpha = 0.1f
+                    )
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(CyberCyan.copy(alpha = glowAlpha), Color.Transparent)
+                        ),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(20.dp.toPx()),
+                        style = Stroke(width = 2.dp.toPx())
+                    )
+                }
+            }
+            .padding(8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = if (selected) screen.selectedIcon else screen.unselectedIcon,
+                contentDescription = screen.title,
+                tint = iconColor,
+                modifier = Modifier.size(24.dp)
+            )
+            AnimatedVisibility(
+                visible = selected,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Text(
+                    text = screen.title,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CyberCyan,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+    }
+}

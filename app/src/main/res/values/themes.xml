@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.AggregatorX" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/dark_background</item>
+        <item name="android:navigationBarColor">@color/dark_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:colorBackground">@color/dark_background</item>
+        <item name="android:colorPrimary">@color/pastel_bluish_green</item>
+        <item name="android:colorPrimaryDark">@color/dark_surface</item>
+        <item name="android:colorAccent">@color/pastel_bluish_green</item>
+        <item name="android:textColor">#E0F2F1</item>
+    </style>
+</resources>

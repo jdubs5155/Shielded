@@ -1,0 +1,145 @@
+package com.aggregatorx.app.di
+
+import android.content.Context
+import com.aggregatorx.app.data.database.AggregatorDatabase
+import com.aggregatorx.app.engine.UnifiedContentEngine
+import com.aggregatorx.app.engine.ai.AICodeInjectionEngine
+import com.aggregatorx.app.engine.ai.AIDecisionEngine
+import com.aggregatorx.app.engine.analyzer.NavigationPatternAnalyzer
+import com.aggregatorx.app.engine.analyzer.SearchQueryOptimizerEngine
+import com.aggregatorx.app.engine.analyzer.SmartContentClassifier
+import com.aggregatorx.app.engine.analyzer.SiteAnalyzerEngine
+import com.aggregatorx.app.engine.analyzer.UniversalFormatParser
+import com.aggregatorx.app.engine.analyzer.EndpointDiscoveryEngine
+import com.aggregatorx.app.engine.media.VideoExtractorEngine
+import com.aggregatorx.app.engine.media.VideoStreamResolver
+import com.aggregatorx.app.engine.nlp.NaturalLanguageQueryProcessor
+import com.aggregatorx.app.engine.network.ProxyVPNEngine
+import com.aggregatorx.app.engine.network.CloudflareBypassEngine
+import com.aggregatorx.app.engine.scraper.SmartNavigationEngine
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import javax.inject.Singleton
+
+/**
+ * Dependency Injection Module for AggregatorX Engine Components
+ * Provides all engine-related dependencies with proper scoping
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+object EngineModule {
+    
+    @Provides
+    @Singleton
+    fun provideProxyVPNEngine(): ProxyVPNEngine {
+        return ProxyVPNEngine()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideCloudflareBypassEngine(): CloudflareBypassEngine {
+        return CloudflareBypassEngine()
+    }
+
+    @Provides
+    @Singleton
+    fun provideEndpointDiscoveryEngine(
+        cloudflareBypassEngine: CloudflareBypassEngine
+    ): EndpointDiscoveryEngine {
+        return EndpointDiscoveryEngine(cloudflareBypassEngine)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideAIDecisionEngine(): AIDecisionEngine {
+        return AIDecisionEngine()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSmartNavigationEngine(): SmartNavigationEngine {
+        return SmartNavigationEngine()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideVideoExtractorEngine(): VideoExtractorEngine {
+        return VideoExtractorEngine()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideVideoStreamResolver(
+        proxyVPNEngine: ProxyVPNEngine,
+        videoExtractorEngine: VideoExtractorEngine
+    ): VideoStreamResolver {
+        return VideoStreamResolver(proxyVPNEngine, videoExtractorEngine)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSiteAnalyzerEngine(): SiteAnalyzerEngine {
+        return SiteAnalyzerEngine()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSmartContentClassifier(): SmartContentClassifier {
+        return SmartContentClassifier()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideUniversalFormatParser(): UniversalFormatParser {
+        return UniversalFormatParser()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideNaturalLanguageQueryProcessor(): NaturalLanguageQueryProcessor {
+        return NaturalLanguageQueryProcessor()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideAICodeInjectionEngine(): AICodeInjectionEngine {
+        return AICodeInjectionEngine()
+    }
+
+    @Provides
+    @Singleton
+    fun provideUnifiedContentEngine(
+        proxyVPNEngine: ProxyVPNEngine,
+        videoStreamResolver: VideoStreamResolver,
+        smartContentClassifier: SmartContentClassifier,
+        universalFormatParser: UniversalFormatParser,
+        siteAnalyzerEngine: SiteAnalyzerEngine
+    ): UnifiedContentEngine {
+        return UnifiedContentEngine(
+            proxyVPNEngine,
+            videoStreamResolver,
+            smartContentClassifier,
+            universalFormatParser,
+            siteAnalyzerEngine
+        )
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSearchQueryOptimizerEngine(
+        database: AggregatorDatabase
+    ): SearchQueryOptimizerEngine {
+        return SearchQueryOptimizerEngine(database.searchQueryPatternDao())
+    }
+    
+    @Provides
+    @Singleton
+    fun provideNavigationPatternAnalyzer(
+        database: AggregatorDatabase
+    ): NavigationPatternAnalyzer {
+        return NavigationPatternAnalyzer(database.navigationPatternDao())
+    }
+}
