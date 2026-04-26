@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="dark_background">#10171A</color>
+    <color name="dark_surface">#1A2327</color>
+    <color name="pastel_bluish_green">#7FE7CC</color> <!-- Pastel bluish-green -->
+    <color name="pastel_blue">#A3C9E2</color> <!-- Pastel blue for accents -->
+    <color name="pastel_green">#A8E6CF</color> <!-- Pastel green for highlights -->
+    <color name="cyber_cyan">#7FE7CC</color> <!-- Use pastel bluish-green for accent -->
+    <color name="cyber_blue">#A3C9E2</color> <!-- Use pastel blue for blue accent -->
+    <color name="cyber_purple">#6C3483</color>
+</resources>

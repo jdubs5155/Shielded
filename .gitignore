@@ -1,0 +1,42 @@
+# Gradle files
+.gradle/
+build/
+*/build/
+app/build/
+
+# Local configuration
+local.properties
+*.iml
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# APK files (built artifacts)
+*.apk
+*.ap_
+*.aab
+
+# Signing
+*.keystore
+*.jks
+
+# Log files
+*.log
+
+# Test output
+/test-results/
+/reports/
+
+# Kotlin
+.kotlin/
+
+# Jupyter
+*.ipynb_checkpoints/
+new-workspace.jupyterlab-workspace
