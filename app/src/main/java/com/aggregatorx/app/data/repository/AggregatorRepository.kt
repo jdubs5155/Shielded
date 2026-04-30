@@ -1,91 +1,67 @@
 package com.aggregatorx.app.data.repository
 
 import com.aggregatorx.app.data.database.AggregatorDao
-import com.aggregatorx.app.data.database.AuditLogDao
-import com.aggregatorx.app.data.model.AuditLogEntity
 import com.aggregatorx.app.data.model.ProviderEntity
 import com.aggregatorx.app.data.model.ResultItem
+import com.aggregatorx.app.engine.ai.NLPQueryEngine
 import com.aggregatorx.app.engine.scraper.ScrapingEngine
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Repository handling the coordination between persistent storage, 
- * scraping engines, and audit logging.
- */
 @Singleton
 class AggregatorRepository @Inject constructor(
-    private val aggregatorDao: AggregatorDao,
-    private val auditLogDao: AuditLogDao,
-    private val scrapingEngine: ScrapingEngine
+    private val dao: AggregatorDao,
+    private val scrapingEngine: ScrapingEngine,
+    private val nlpEngine: NLPQueryEngine
 ) {
 
-    fun getEnabledProviders(): Flow<List<ProviderEntity>> = aggregatorDao.getEnabledProviders()
-
-    suspend fun getProviderByName(name: String): ProviderEntity? = aggregatorDao.getProviderByName(name)
-
     /**
-     * Scrapes a specific provider, updates pagination state, and logs the action.
+     * Executes a new search across all enabled providers.
+     * Uses NLP to optimize the query before hitting the web.
      */
-    suspend fun scrapeProvider(query: String, providerName: String, page: Int): List<ResultItem> {
-        val provider = aggregatorDao.getProviderByName(providerName) 
-            ?: throw IllegalArgumentException("Provider not found: $providerName")
+    suspend fun performSearch(userQuery: String) {
+        val optimizedQuery = nlpEngine.rewriteQuery(userQuery)
+        val providers = dao.getEnabledProviders().first()
 
-        return try {
-            // Log the start of the scraping action
-            auditLogDao.insertLog(
-                AuditLogEntity(
-                    actionType = "SCRAPE_START",
-                    providerName = providerName,
-                    details = "Query: $query, Page: $page"
-                )
-            )
-
-            // Perform the actual scrape via the engine
-            val results = scrapingEngine.scrape(
-                query = query,
-                provider = provider,
-                page = page
-            )
-
-            // Update provider's current page in the database for persistence
-            provider.currentPage = page
-            aggregatorDao.updateProvider(provider)
-
-            // Save results to cache
-            aggregatorDao.insertResults(results)
-
-            auditLogDao.insertLog(
-                AuditLogEntity(
-                    actionType = "SCRAPE_SUCCESS",
-                    providerName = providerName,
-                    details = "Found ${results.size} items"
-                )
-            )
-
-            results
-        } catch (e: Exception) {
-            auditLogDao.insertLog(
-                AuditLogEntity(
-                    actionType = "SCRAPE_FAILURE",
-                    providerName = providerName,
-                    details = "Error: ${e.message}",
-                    isSuccess = false
-                )
-            )
-            emptyList()
+        providers.forEach { provider ->
+            // Clear old results to keep the UI clean during a new search
+            dao.clearResultsByProvider(provider.name)
+            
+            val results = scrapingEngine.scrape(provider, optimizedQuery, page = 1)
+            dao.insertResults(results)
         }
     }
 
-    suspend fun updateItemLikeStatus(id: String, isLiked: Boolean) {
-        aggregatorDao.updateItemLikeStatus(id, isLiked)
-        auditLogDao.insertLog(
-            AuditLogEntity(
-                actionType = "PREFERENCE_UPDATE",
-                providerName = null,
-                details = "Item $id liked: $isLiked"
-            )
-        )
+    /**
+     * Handles pagination for a specific provider.
+     */
+    suspend fun loadMore(providerName: String, direction: Int) {
+        val providers = dao.getEnabledProviders().first()
+        val provider = providers.find { it.name == providerName } ?: return
+        
+        // Direction: 1 for next, -1 for previous (logic varies by provider type)
+        val results = scrapingEngine.scrape(provider, "", page = direction)
+        dao.insertResults(results)
     }
+
+    /**
+     * Toggles the 'Liked' state and triggers AI refinement.
+     */
+    suspend fun toggleLike(item: ResultItem) {
+        val updatedItem = item.copy(isLiked = !item.isLiked)
+        dao.updateResult(updatedItem)
+
+        if (updatedItem.isLiked) {
+            // Trigger background refinement loop
+            val likedItems = dao.getResultsByProvider(item.providerName).first().filter { it.isLiked }
+            nlpEngine.refineResults(likedItems)
+        }
+    }
+
+    fun getResultsForProvider(providerName: String): Flow<List<ResultItem>> =
+        dao.getResultsByProvider(providerName)
+
+    fun getProviders(): Flow<List<ProviderEntity>> = dao.getEnabledProviders()
 }
