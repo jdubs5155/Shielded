@@ -1,20 +1,18 @@
-// Top-level build file for AggregatorX - Advanced Web Scraping Aggregator
+// Top-level build file for AggregatorX
 plugins {
-    // Android Gradle Plugin for the application
     id("com.android.application") version "8.7.3" apply false
     id("com.android.library") version "8.7.3" apply false
     
-    // Kotlin Android support (Must match the version used in the app-level file)
+    // Kotlin Version 2.1.10
     id("org.jetbrains.kotlin.android") version "2.1.10" apply false
-    
-    // Jetpack Compose Compiler Plugin (Required for Kotlin 2.0+)
     id("org.jetbrains.kotlin.plugin.compose") version "2.1.10" apply false
-    
-    // Dependency Injection (Hilt)
-    id("com.google.dagger.hilt.android") version "2.55" apply false
-    
-    // Kotlin Serialization (Used for deep state persistence and JSON handling)
     id("org.jetbrains.kotlin.plugin.serialization") version "2.1.10" apply false
+    
+    // KSP - Required to replace Kapt and fix the NonExistentClass error
+    id("com.google.devtools.ksp") version "2.1.10-1.0.29" apply false
+    
+    // Dependency Injection
+    id("com.google.dagger.hilt.android") version "2.55" apply false
 }
 
 tasks.register("clean", Delete::class) {
