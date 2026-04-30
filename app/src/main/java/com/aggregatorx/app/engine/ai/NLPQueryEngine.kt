@@ -3,82 +3,85 @@ package com.aggregatorx.app.engine.ai
 import android.content.Context
 import com.aggregatorx.app.data.database.AuditLogDao
 import com.aggregatorx.app.data.model.AuditLogEntity
+import com.aggregatorx.app.data.model.ResultItem
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Local AI engine utilizing Dolphin 3.0-Llama3.1-8B-GGUF for NLP query 
- * understanding and continuous result refinement.
+ * Local AI Engine using Dolphin 3.0 (Llama 3.1 8B GGUF).
+ * Handles NLP query rewriting, preference learning, and continuous refinement.
  */
 @Singleton
 class NLPQueryEngine @Inject constructor(
     @ApplicationContext private val context: Context,
     private val auditLogDao: AuditLogDao
 ) {
+    private val _isProcessing = MutableStateFlow(false)
+    val isProcessing = _isProcessing.asStateFlow()
 
-    // Placeholder for llama.cpp / kotlinllamacpp context
-    private var modelLoaded = false
+    private val aiScope = CoroutineScope(Dispatchers.Default)
 
     /**
-     * Rewrites a natural language query into a set of optimized keywords.
-     * Example: "Find me some high quality nature videos" -> "4k nature cinematic"
+     * Rewrites a natural language query into an optimized search string
+     * for better provider coverage.
      */
     suspend fun rewriteQuery(originalQuery: String): String = withContext(Dispatchers.Default) {
-        if (!modelLoaded) {
-            loadLocalModel()
-        }
-
-        // Logic to run inference on the local GGUF model
-        // Using a system prompt to guide the Dolphin-3.0 model:
-        // "You are a search assistant. Rewrite the following query for maximum search efficiency."
+        _isProcessing.value = true
+        logAction("AI_QUERY_REWRITE", "Optimizing query: $originalQuery")
         
-        val optimizedQuery = try {
-            // Simulated inference call to local LLM
-            performInference(originalQuery)
-        } catch (e: Exception) {
-            auditLogDao.insertLog(
-                AuditLogEntity(
-                    actionType = "AI_INFERENCE_ERROR",
-                    providerName = null,
-                    details = "NLP Query Rewrite failed: ${e.message}",
-                    isSuccess = false
-                )
-            )
-            originalQuery // Fallback to original on failure
-        }
-
-        optimizedQuery
+        // Placeholder for llama.cpp / kotlinllamacpp JNI call
+        // In production: return llamaProxy.complete("Rewrite this for a search engine: $originalQuery")
+        val optimized = originalQuery // Logic to be implemented via llama-android bindings
+        
+        _isProcessing.value = false
+        optimized
     }
 
     /**
-     * Background refinement loop. Analyzes baseline results and "liked" content
-     * to suggest similar items or deeper search paths.
+     * Background refinement loop: Analyzes liked items and suggests
+     * similar/related searches without clearing the baseline results.
      */
-    suspend fun refineResults(results: List<com.aggregatorx.app.data.model.ResultItem>) {
-        withContext(Dispatchers.Default) {
-            // Analyze metadata of the top results and user likes
-            // LLM identifies patterns (genres, creators, keywords)
-            // and triggers secondary background scrapes
-            auditLogDao.insertLog(
-                AuditLogEntity(
-                    actionType = "AI_REFINEMENT_START",
-                    providerName = null,
-                    details = "Analyzing ${results.size} items for refinement"
-                )
-            )
+    fun startRefinementLoop(likedItems: List<ResultItem>, onNewQuery: (String) -> Unit) {
+        aiScope.launch {
+            if (likedItems.isEmpty()) return@launch
+            
+            _isProcessing.value = true
+            val titles = likedItems.joinToString(", ") { it.title }
+            logAction("AI_REFINEMENT_LOOP", "Analyzing preferences from: ${likedItems.size} items")
+
+            // AI Logic: Analyze titles to find common themes/keywords
+            // Simulated AI output:
+            val refinedQuery = "related to $titles" 
+            
+            onNewQuery(refinedQuery)
+            _isProcessing.value = false
         }
     }
 
-    private suspend fun loadLocalModel() {
-        // Initialization of llama.cpp context from assets/models/dolphin_3_0.gguf
-        modelLoaded = true
+    /**
+     * Token Handling: Analyzes extracted JWT/Cookies to determine
+     * if they are beneficial for testing.
+     */
+    suspend fun analyzeTokens(tokens: String): Boolean = withContext(Dispatchers.Default) {
+        logAction("AI_TOKEN_ANALYSIS", "Evaluating extracted headers/tokens")
+        // Logic to test, modify, or reuse tokens
+        true 
     }
 
-    private fun performInference(input: String): String {
-        // Native call to llama.cpp bindings
-        return input 
+    private suspend fun logAction(type: String, details: String) {
+        auditLogDao.insertLog(
+            AuditLogEntity(
+                actionType = type,
+                providerName = "LocalLLM",
+                details = details
+            )
+        )
     }
 }
