@@ -2,92 +2,94 @@ package com.aggregatorx.app.engine.scraper
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
 import android.webkit.JavascriptInterface
-import android.webkit.WebSettings
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.coroutines.resume
 
-/**
- * A headless (off-screen) WebView helper to resolve dynamic JavaScript-heavy sites.
- */
 @Singleton
 class HeadlessBrowserHelper @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-
     private var webView: WebView? = null
+    private val handler = Handler(Looper.getMainLooper())
 
     @SuppressLint("SetJavaScriptEnabled")
-    private suspend fun getOrCreateWebView(): WebView = withContext(Dispatchers.Main) {
+    private fun getOrCreateWebView(): WebView {
         if (webView == null) {
             webView = WebView(context).apply {
-                settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    databaseEnabled = true
-                    cacheMode = WebSettings.LOAD_DEFAULT
-                    // Note: Basic settings only. 
-                    // Specialized stealth/header spoofing is not included.
-                }
-                webViewClient = object : WebViewClient() {
-                    override fun onPageFinished(view: WebView?, url: String?) {
-                        super.onPageFinished(view, url)
-                    }
-                }
-            }
-        }
-        webView!!
-    }
-
-    /**
-     * Navigates to a URL and extracts the fully rendered HTML.
-     */
-    suspend fun getHtml(url: String): String = suspendCancellableCoroutine { continuation ->
-        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-        
-        mainHandler.post {
-            viewModelScopeLaunch {
-                val view = getOrCreateWebView()
-                
-                view.addJavascriptInterface(object {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.userAgentString = "Mozilla/5.0 (Linux; Android 13; SM-A326U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Mobile Safari/537.36"
+                // Stealth: Disable webdriver flags
+                addJavascriptInterface(object {
                     @JavascriptInterface
-                    fun processHtml(html: String) {
-                        if (continuation.isActive) continuation.resume(html)
+                    fun onHtmlExtracted(html: String, deferred: CompletableDeferred<String>) {
+                        deferred.complete(html)
                     }
-                }, "HTMLOUT")
-
-                view.webViewClient = object : WebViewClient() {
-                    override fun onPageFinished(view: WebView?, url: String?) {
-                        view?.loadUrl("javascript:window.HTMLOUT.processHtml('<html>'+document.getElementsByTagName('html')[0].innerHTML+'</html>');")
-                    }
-                }
-                
-                view.loadUrl(url)
+                }, "AndroidInterface")
             }
         }
-    }
-
-    private fun viewModelScopeLaunch(block: suspend () -> Unit) {
-        // Internal helper to ensure WebView operations stay on Main Thread
-        block
+        return webView!!
     }
 
     /**
-     * Executes a specific JS script and returns the result.
-     * Useful for clicking elements or finding hidden tokens.
+     * Executes headless navigation and returns full DOM HTML after JS execution.
      */
-    suspend fun executeScript(script: String): String = suspendCancellableCoroutine { continuation ->
-        android.os.Handler(android.os.Looper.getMainLooper()).post {
-            webView?.evaluateJavascript(script) { result ->
-                if (continuation.isActive) continuation.resume(result ?: "")
+    suspend fun getHtml(url: String): String = withContext(Dispatchers.Main) {
+        val deferred = CompletableDeferred<String>()
+        val view = getOrCreateWebView()
+
+        view.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                // Execute JS to grab the DOM and pass it back to our interface
+                view?.evaluateJavascript(
+                    "(function() { return document.documentElement.outerHTML; })();"
+                ) { html ->
+                    deferred.complete(html.trim('"').replace("\\u003C", "<").replace("\\\"", "\""))
+                }
             }
+        }
+        view.loadUrl(url)
+        deferred.await()
+    }
+
+    /**
+     * Advanced: Maps the DOM to identify potential API endpoints or hidden video sources.
+     */
+    suspend fun discoverEndpoints(): List<String> = withContext(Dispatchers.Main) {
+        val deferred = CompletableDeferred<List<String>>()
+        val script = """
+            (function() {
+                val links = Array.from(document.querySelectorAll('a, script, source'));
+                return links.map(l => l.src || l.href).filter(link => link && link.includes('api') || link.includes('.m3u8'));
+            })();
+        """.trimIndent()
+
+        getOrCreateWebView().evaluateJavascript(script) { result ->
+            // Parsing the JS array string returned
+            deferred.complete(result.split(",").map { it.trim('"').replace("[", "").replace("]", "") })
+        }
+        deferred.await()
+    }
+
+    /**
+     * Simulates human-like interaction for pagination or bypassing simple gates.
+     */
+    fun clickElement(selector: String) {
+        handler.post {
+            getOrCreateWebView().evaluateJavascript(
+                "document.querySelector('$selector')?.click();", null
+            )
         }
     }
 }
