@@ -11,13 +11,8 @@ import androidx.media3.exoplayer.offline.DownloadService
 import androidx.media3.exoplayer.scheduler.PlatformScheduler
 import androidx.media3.exoplayer.scheduler.Scheduler
 import com.aggregatorx.app.R
-import com.aggregatorx.app.di.DownloadModule
 import java.util.concurrent.Executor
 
-/**
- * Background service responsible for managing video downloads.
- * Utilizes Media3 DownloadManager for handling HLS, DASH, and MP4 formats.
- */
 @OptIn(UnstableApi::class)
 class AggregatorDownloadService : DownloadService(
     NOTIFICATION_ID,
@@ -28,8 +23,9 @@ class AggregatorDownloadService : DownloadService(
 ) {
 
     override fun getDownloadManager(): DownloadManager {
-        // This manager is provided via Hilt from the DownloadModule
-        return DownloadModule.getDownloadManager(this)
+        // This is a simplified singleton access; in full implementation, 
+        // this is provided via Hilt from a MediaModule.
+        return DownloadHelper.getDownloadManager(this)
     }
 
     override fun getScheduler(): Scheduler? {
@@ -40,8 +36,8 @@ class AggregatorDownloadService : DownloadService(
         downloads: MutableList<Download>,
         notMetRequirements: Int
     ): Notification {
-        val helper = DownloadNotificationHelper(this, CHANNEL_ID)
-        return helper.buildProgressNotification(
+        val notificationHelper = DownloadNotificationHelper(this, CHANNEL_ID)
+        return notificationHelper.buildProgressNotification(
             this,
             R.drawable.ic_download,
             null,
