@@ -1,16 +1,19 @@
 package com.aggregatorx.app
 
 import android.app.Application
+import com.aggregatorx.app.data.database.DatabaseInitializer
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
-/**
- * AggregatorX - Advanced Multi-Provider Web Search & Scraping
- * 
- * Features:
- * - Multi-provider search with intelligent NLP query rewriting
- * - Resilient scraping with Cloudflare bypass and Headless WebView
- * - Media3-powered video playback and background downloads
- * - Local AI refinement loop using Dolphin-3.0-Llama3.1-8B-GGUF
- */
 @HiltAndroidApp
-class AggregatorApplication : Application()
+class AggregatorApplication : Application() {
+
+    @Inject
+    lateinit var dbInitializer: DatabaseInitializer
+
+    override fun onCreate() {
+        super.onCreate()
+        // Seeds the database with initial search providers
+        dbInitializer.initialize()
+    }
+}
