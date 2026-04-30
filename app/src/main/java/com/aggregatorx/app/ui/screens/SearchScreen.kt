@@ -1,758 +1,119 @@
 package com.aggregatorx.app.ui.screens
 
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
 import androidx.compose.animation.*
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.lazy.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import com.aggregatorx.app.data.model.ProviderSearchResults
-import com.aggregatorx.app.data.model.SearchResult
-import com.aggregatorx.app.ui.components.*
-import com.aggregatorx.app.ui.theme.*
-import com.aggregatorx.app.ui.viewmodel.SearchUiState
+import com.aggregatorx.app.data.model.ResultItem
 import com.aggregatorx.app.ui.viewmodel.SearchViewModel
-import com.aggregatorx.app.ui.viewmodel.VideoPreviewResult
-import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
-    viewModel: SearchViewModel = hiltViewModel()
+    viewModel: SearchViewModel,
+    onOpenBrowser: (String) -> Unit,
+    onWatchVideo: (String) -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val providerResults by viewModel.providerResults.collectAsState()
-    val likedUrls by viewModel.likedUrls.collectAsState()
-    val context = LocalContext.current
-    
-    val listState = rememberLazyListState()
-    
-    // Scroll-aware UI collapse for more result viewing space
-    val isScrollingDown = remember { derivedStateOf {
-        listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 50
-    }}
-    
-    // Track if we have results to show (determines if header should be collapsible)
-    val hasResults = providerResults.isNotEmpty()
-    
-    // Collapse header when scrolling down through results
-    val collapseHeader = hasResults && isScrollingDown.value
-    
-    // Animated height for collapsible header section
-    val headerHeight by animateDpAsState(
-        targetValue = if (collapseHeader) 0.dp else 76.dp,
-        animationSpec = tween(durationMillis = 200)
-    )
-    
-    val headerAlpha by animateFloatAsState(
-        targetValue = if (collapseHeader) 0f else 1f,
-        animationSpec = tween(durationMillis = 150)
-    )
-    
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(DarkBackground, DarkSurface)
-                )
-            )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp)
-        ) {
-            // Collapsible header section - only shows when NOT scrolling through results
-            AnimatedVisibility(
-                visible = !collapseHeader,
-                enter = fadeIn(animationSpec = tween(150)) + expandVertically(animationSpec = tween(200)),
-                exit = fadeOut(animationSpec = tween(100)) + shrinkVertically(animationSpec = tween(150))
-            ) {
-                Column {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    // Search bar - always visible at top when not scrolling
-                    FuturisticSearchBar(
-                        query = uiState.query,
-                        onQueryChange = viewModel::updateQuery,
-                        onSearch = viewModel::search,
-                        isLoading = uiState.isSearching
-                    )
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-            }
-            
-            // Search stats - collapses when scrolling
-            AnimatedVisibility(
-                visible = (uiState.searchCompleted || uiState.isSearching) && !collapseHeader,
-                enter = fadeIn() + slideInVertically(),
-                exit = fadeOut() + slideOutVertically()
-            ) {
-                SearchStatsBar(
-                    totalResults = uiState.totalResults,
-                    successfulProviders = uiState.successfulProviders,
-                    failedProviders = uiState.failedProviders,
-                    isSearching = uiState.isSearching
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val resultsByProvider by viewModel.resultsByProvider.collectAsState()
+    val loadingProviders by viewModel.loadingProviders.collectAsState()
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Persistent Search Bar
+        TopAppBar(
+            title = {
+                TextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.performNewSearch(it) },
+                    placeholder = { Text("Search authorized sites...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
                 )
             }
-            
-            // Small spacer always present
-            Spacer(modifier = Modifier.height(if (collapseHeader) 4.dp else 8.dp))
-            
-            // Content
-            when {
-                uiState.isSearching && providerResults.isEmpty() -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            FuturisticLoader(size = 64.dp)
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Text(
-                                text = "Searching across providers...",
-                                color = TextSecondary,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        }
-                    }
-                }
-                
-                providerResults.isNotEmpty() -> {
-                    ProviderResultsList(
-                        providerResults = providerResults,
-                        topResults = uiState.aggregatedResults?.topResults ?: emptyList(),
-                        relatedResults = uiState.aggregatedResults?.relatedResults ?: emptyList(),
-                        listState = listState,
-                        onResultClick = { result ->
-                            // Result cards already open in-app playback by default
-                        },
-                        onDownload = { result ->
-                            viewModel.downloadResult(result)
-                            Toast.makeText(context, "Downloading: ${result.title}", Toast.LENGTH_SHORT).show()
-                        },
-                        onOpenExternal = { result ->
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(result.url))
-                            context.startActivity(intent)
-                        },
-                        onLike = { result -> viewModel.toggleLike(result) },
-                        likedUrls = likedUrls,
-                        onExtractVideoUrl = { url ->
-                            viewModel.extractVideoUrlForPreview(url)
-                        },
-                        onExtractVideoForPreview = { url ->
-                            viewModel.extractVideoForPreview(url)
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                
-                uiState.recentSearches.isNotEmpty() && !uiState.searchCompleted -> {
-                    RecentSearches(
-                        searches = uiState.recentSearches,
-                        onSearchClick = viewModel::searchFromHistory,
-                        onClearAll = viewModel::clearSearchHistory,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                
-                else -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        if (uiState.searchSuggestions.isNotEmpty()) {
-                            SearchSuggestionsSection(
-                                prompt = "No exact matches found. Try one of these smarter search terms:",
-                                suggestions = uiState.searchSuggestions,
-                                onSuggestionClick = {
-                                    viewModel.updateQuery(it)
-                                    viewModel.search()
-                                },
-                                modifier = Modifier.padding(horizontal = 24.dp)
-                            )
-                        }
-                        EmptySearchState(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .weight(1f)
-                        )
-                    }
-                }
-            }
-        }
-        
-        // Error snackbar
-        uiState.error?.let { error ->
-            Snackbar(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(16.dp),
-                containerColor = AccentRed.copy(alpha = 0.9f),
-                contentColor = TextPrimary,
-                action = {
-                    TextButton(onClick = viewModel::clearError) {
-                        Text("Dismiss", color = TextPrimary)
-                    }
-                }
-            ) {
-                Text(error)
-            }
-        }
-    }
-    
-}
+        )
 
-@Composable
-fun SearchStatsBar(
-    totalResults: Int,
-    successfulProviders: Int,
-    failedProviders: Int,
-    isSearching: Boolean
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(DarkCard)
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly
-    ) {
-        StatItem(
-            icon = Icons.Default.Summarize,
-            value = totalResults.toString(),
-            label = "Results",
-            color = CyberCyan
-        )
-        StatItem(
-            icon = Icons.Default.CheckCircle,
-            value = successfulProviders.toString(),
-            label = "Success",
-            color = AccentGreen
-        )
-        StatItem(
-            icon = Icons.Default.Error,
-            value = failedProviders.toString(),
-            label = "Failed",
-            color = if (failedProviders > 0) AccentRed else TextTertiary
-        )
-        if (isSearching) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
-                color = CyberCyan,
-                strokeWidth = 2.dp
-            )
-        }
-    }
-}
-
-@Composable
-fun StatItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    value: String,
-    label: String,
-    color: Color
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = color,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = value,
-            color = color,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleMedium
-        )
-        Text(
-            text = label,
-            color = TextTertiary,
-            style = MaterialTheme.typography.labelSmall
-        )
-    }
-}
-
-@Composable
-fun ProviderResultsList(
-    providerResults: List<ProviderSearchResults>,
-    topResults: List<SearchResult>,
-    relatedResults: List<SearchResult> = emptyList(),
-    listState: LazyListState,
-    onResultClick: (SearchResult) -> Unit,
-    onDownload: (SearchResult) -> Unit = {},
-    onOpenExternal: (SearchResult) -> Unit = {},
-    onLike: (SearchResult) -> Unit = {},
-    likedUrls: Set<String> = emptySet(),
-    onExtractVideoUrl: (suspend (String) -> String?)? = null,
-    onExtractVideoForPreview: (suspend (String) -> VideoPreviewResult?)? = null,
-    modifier: Modifier = Modifier
-) {
-    // Separate successful and failed providers (failed go to bottom)
-    val successfulProviders = providerResults.filter { it.success && it.results.isNotEmpty() }
-    val emptyProviders = providerResults.filter { it.success && it.results.isEmpty() }
-    val failedProviders = providerResults.filter { !it.success }
-    
-    // Provider quick-jump tabs
-    var selectedProviderIndex by remember { mutableStateOf(-1) } // -1 = Top Results
-    val coroutineScope = rememberCoroutineScope()
-    
-    Column(modifier = modifier) {
-        // Provider Tab Bar for quick navigation
-        if (successfulProviders.isNotEmpty()) {
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp)
-            ) {
-                // Top Results tab
-                item {
-                    ProviderTabChip(
-                        name = "🏆 Top",
-                        count = topResults.size,
-                        isSelected = selectedProviderIndex == -1,
-                        isError = false,
-                        onClick = {
-                            selectedProviderIndex = -1
-                            coroutineScope.launch {
-                                listState.animateScrollToItem(0)
-                            }
-                        }
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            resultsByProvider.forEach { (providerName, items) ->
+                item(key = providerName) {
+                    ProviderSection(
+                        name = providerName,
+                        items = items,
+                        isLoading = loadingProviders.contains(providerName),
+                        onPagination = { direction -> viewModel.navigateProviderPage(providerName, direction) },
+                        onLike = { item -> viewModel.toggleLike(item) },
+                        onOpenBrowser = onOpenBrowser,
+                        onWatchVideo = onWatchVideo
                     )
                 }
-                
-                // Provider tabs
-                items(successfulProviders.size) { index ->
-                    val provider = successfulProviders[index]
-                    ProviderTabChip(
-                        name = provider.provider.name,
-                        count = provider.results.size,
-                        isSelected = selectedProviderIndex == index,
-                        isError = false,
-                        onClick = {
-                            selectedProviderIndex = index
-                            // Calculate scroll position (top results + providers before this one)
-                            val scrollTo = 1 + (if (topResults.isNotEmpty()) topResults.size + 2 else 0) +
-                                successfulProviders.take(index).sumOf { it.results.size + 2 }
-                            coroutineScope.launch {
-                                listState.animateScrollToItem(scrollTo)
-                            }
-                        }
-                    )
-                }
-                
-                // Failed providers indicator
-                if (failedProviders.isNotEmpty()) {
-                    item {
-                        ProviderTabChip(
-                            name = "⚠️ Failed",
-                            count = failedProviders.size,
-                            isSelected = false,
-                            isError = true,
-                            onClick = {
-                                // Scroll to bottom
-                                coroutineScope.launch {
-                                    listState.animateScrollToItem(listState.layoutInfo.totalItemsCount - 1)
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        }
-        
-        // Main results list with improved scrolling
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            // Improve scroll performance
-            userScrollEnabled = true
-        ) {
-            // Top Results Section
-            if (topResults.isNotEmpty()) {
-                item(key = "top_header") {
-                    Text(
-                        text = "🏆 Top Results",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = AccentYellow,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-                
-                items(
-                    items = topResults.take(10),
-                    key = { "top_${it.url.hashCode()}" }
-                ) { result ->
-                    SearchResultCard(
-                        result = result,
-                        onClick = { onResultClick(result) },
-                        onDownload = { onDownload(result) },
-                        onOpenExternal = { onOpenExternal(result) },
-                        onLike = { onLike(result) },
-                        isLiked = result.url in likedUrls,
-                        showControls = true,
-                        onExtractVideoUrl = onExtractVideoUrl,
-                        onExtractVideoForPreview = onExtractVideoForPreview
-                    )
-                }
-                
-                item(key = "top_divider") {
-                    HorizontalDivider(
-                        color = DarkSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 12.dp)
-                    )
-                }
-            }
-
-            if (relatedResults.isNotEmpty()) {
-                item(key = "related_header") {
-                    Text(
-                        text = "✨ Suggested Similar Results",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = CyberCyan,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-                
-                items(
-                    items = relatedResults.take(8),
-                    key = { "related_${it.url.hashCode()}" }
-                ) { result ->
-                    SearchResultCard(
-                        result = result,
-                        onClick = { onResultClick(result) },
-                        onDownload = { onDownload(result) },
-                        onOpenExternal = { onOpenExternal(result) },
-                        onLike = { onLike(result) },
-                        isLiked = result.url in likedUrls,
-                        showControls = true,
-                        onExtractVideoUrl = onExtractVideoUrl,
-                        onExtractVideoForPreview = onExtractVideoForPreview,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
-                }
-                
-                item(key = "related_divider") {
-                    HorizontalDivider(
-                        color = DarkSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 12.dp)
-                    )
-                }
-            }
-            
-            // Provider sections - Successful providers with results first
-            successfulProviders.forEach { providerResult ->
-                item(key = "header_${providerResult.provider.id}") {
-                    ProviderResultsHeader(
-                        providerName = providerResult.provider.name,
-                        resultCount = providerResult.results.size,
-                        searchTime = providerResult.searchTime,
-                        success = true,
-                        errorMessage = null
-                    )
-                }
-                
-                items(
-                    items = providerResult.results,
-                    key = { "${providerResult.provider.id}_${it.url.hashCode()}" }
-                ) { result ->
-                    SearchResultCard(
-                        result = result,
-                        onClick = { onResultClick(result) },
-                        onDownload = { onDownload(result) },
-                        onOpenExternal = { onOpenExternal(result) },
-                        onLike = { onLike(result) },
-                        isLiked = result.url in likedUrls,
-                        showControls = true,
-                        onExtractVideoUrl = onExtractVideoUrl,
-                        onExtractVideoForPreview = onExtractVideoForPreview,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
-                }
-                
-                item(key = "spacer_${providerResult.provider.id}") {
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-            }
-            
-            // Empty providers (searched but no results)
-            if (emptyProviders.isNotEmpty()) {
-                item(key = "empty_header") {
-                    Text(
-                        text = "No Results From:",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = TextTertiary,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-                
-                item(key = "empty_list") {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        emptyProviders.forEach { provider ->
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = DarkCard
-                            ) {
-                                Text(
-                                    text = provider.provider.name,
-                                    color = TextTertiary,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Failed providers at the BOTTOM
-            if (failedProviders.isNotEmpty()) {
-                item(key = "failed_header") {
-                    HorizontalDivider(
-                        color = AccentRed.copy(alpha = 0.3f),
-                        modifier = Modifier.padding(vertical = 12.dp)
-                    )
-                    Text(
-                        text = "⚠️ Provider Errors",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = AccentRed.copy(alpha = 0.8f),
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-                
-                items(
-                    items = failedProviders,
-                    key = { "failed_${it.provider.id}" }
-                ) { providerResult ->
-                    FailedProviderCard(
-                        providerName = providerResult.provider.name,
-                        errorMessage = providerResult.errorMessage ?: "Connection failed"
-                    )
-                }
-            }
-            
-            // Bottom padding for better scrolling
-            item(key = "bottom_spacer") {
-                Spacer(modifier = Modifier.height(80.dp))
             }
         }
     }
 }
 
 @Composable
-fun ProviderTabChip(
+fun ProviderSection(
     name: String,
-    count: Int,
-    isSelected: Boolean,
-    isError: Boolean,
-    onClick: () -> Unit
+    items: List<ResultItem>,
+    isLoading: Boolean,
+    onPagination: (Int) -> Unit,
+    onLike: (ResultItem) -> Unit,
+    onOpenBrowser: (String) -> Unit,
+    onWatchVideo: (String) -> Unit
 ) {
-    val backgroundColor = when {
-        isError -> AccentRed.copy(alpha = 0.2f)
-        isSelected -> CyberCyan.copy(alpha = 0.3f)
-        else -> DarkCard
-    }
-    val textColor = when {
-        isError -> AccentRed
-        isSelected -> CyberCyan
-        else -> TextSecondary
-    }
-    
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = backgroundColor,
-        modifier = Modifier.clickable(onClick = onClick)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = name,
-                color = textColor,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                maxLines = 1
-            )
-            if (count > 0) {
-                Surface(
-                    shape = CircleShape,
-                    color = textColor.copy(alpha = 0.2f)
-                ) {
-                    Text(
-                        text = count.toString(),
-                        color = textColor,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-            }
-        }
-    }
-}
+    var expanded by remember { mutableStateOf(true) }
 
-@Composable
-fun FailedProviderCard(
-    providerName: String,
-    errorMessage: String
-) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = AccentRed.copy(alpha = 0.1f)
-        ),
-        shape = RoundedCornerShape(12.dp)
+            .padding(8.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Error,
-                contentDescription = null,
-                tint = AccentRed.copy(alpha = 0.7f),
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = providerName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = errorMessage,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextTertiary,
-                    maxLines = 1
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun RecentSearches(
-    searches: List<com.aggregatorx.app.data.model.SearchHistoryEntry>,
-    onSearchClick: (String) -> Unit,
-    onClearAll: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Recent Searches",
-                style = MaterialTheme.typography.titleMedium,
-                color = TextSecondary
-            )
-            TextButton(onClick = onClearAll) {
-                Text("Clear All", color = CyberCyan)
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(searches) { search ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSearchClick(search.query) },
-                    colors = CardDefaults.cardColors(containerColor = DarkCard),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(text = name, style = MaterialTheme.typography.titleMedium)
+                
+                // Per-Provider Pagination Buttons
+                Row {
+                    IconButton(onClick = { onPagination(-1) }) { 
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back Page") 
+                    }
+                    IconButton(onClick = { onPagination(0) }) { 
+                        if (isLoading) CircularProgressIndicator(size = 20.dp) 
+                        else Icon(Icons.Default.Refresh, contentDescription = "Refresh") 
+                    }
+                    IconButton(onClick = { onPagination(1) }) { 
+                        Icon(Icons.Default.ArrowForward, contentDescription = "Forward Page") 
+                    }
+                    IconButton(onClick = { expanded = !expanded }) {
                         Icon(
-                            imageVector = Icons.Default.History,
-                            contentDescription = null,
-                            tint = TextTertiary,
-                            modifier = Modifier.size(20.dp)
+                            if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = search.query,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = TextPrimary
-                            )
-                            Text(
-                                text = "${search.resultCount} results from ${search.providersSearched} providers",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextTertiary
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            tint = CyberCyan,
-                            modifier = Modifier.size(20.dp)
+                    }
+                }
+            }
+
+            AnimatedVisibility(visible = expanded) {
+                Column {
+                    items.forEach { item ->
+                        ResultRow(
+                            item = item,
+                            onLike = { onLike(item) },
+                            onOpenBrowser = { onOpenBrowser(item.url) },
+                            onWatchVideo = { onWatchVideo(item.videoUrl ?: "") }
                         )
                     }
                 }
@@ -762,125 +123,29 @@ fun RecentSearches(
 }
 
 @Composable
-fun EmptySearchState(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.Search,
-            contentDescription = null,
-            modifier = Modifier.size(80.dp),
-            tint = TextTertiary.copy(alpha = 0.5f)
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = "Start searching",
-            style = MaterialTheme.typography.headlineSmall,
-            color = TextSecondary
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Enter a search term to find content\nacross all your configured providers",
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextTertiary,
-            textAlign = TextAlign.Center
-        )
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        // Feature highlights
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            FeatureChip(
-                icon = Icons.Default.Speed,
-                text = "Fast",
-                color = AccentGreen
-            )
-            FeatureChip(
-                icon = Icons.Default.Hub,
-                text = "Multi-provider",
-                color = CyberCyan
-            )
-            FeatureChip(
-                icon = Icons.Default.AutoAwesome,
-                text = "Smart Ranking",
-                color = CyberPurple
-            )
-        }
-    }
-}
-
-@Composable
-fun SearchSuggestionsSection(
-    prompt: String,
-    suggestions: List<String>,
-    onSuggestionClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+fun ResultRow(
+    item: ResultItem,
+    onLike: () -> Unit,
+    onOpenBrowser: () -> Unit,
+    onWatchVideo: () -> Unit
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = prompt,
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextSecondary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        FlowRow(
-            mainAxisSpacing = 8.dp,
-            crossAxisSpacing = 8.dp,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            suggestions.forEach { suggestion ->
-                AssistChip(
-                    onClick = { onSuggestionClick(suggestion) },
-                    label = {
-                        Text(
-                            text = suggestion,
-                            color = DarkBackground,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = CyberCyan.copy(alpha = 0.18f),
-                        labelColor = CyberCyan
+    ListItem(
+        headlineContent = { Text(item.title) },
+        supportingContent = { Text(item.description ?: "") },
+        trailingContent = {
+            Row {
+                IconButton(onClick = onLike) {
+                    Icon(
+                        imageVector = if (item.isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Like",
+                        tint = if (item.isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                     )
-                )
+                }
+                IconButton(onClick = onOpenBrowser) { Icon(Icons.Default.Public, contentDescription = "Browser") }
+                if (item.videoUrl != null) {
+                    IconButton(onClick = onWatchVideo) { Icon(Icons.Default.PlayArrow, contentDescription = "Watch") }
+                }
             }
         }
-        Spacer(modifier = Modifier.height(16.dp))
-    }
-}
-
-@Composable
-fun FeatureChip(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    text: String,
-    color: Color
-) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = color.copy(alpha = 0.1f)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = text,
-                color = color,
-                style = MaterialTheme.typography.labelMedium
-            )
-        }
-    }
+    )
 }
