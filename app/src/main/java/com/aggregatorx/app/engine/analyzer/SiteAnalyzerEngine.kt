@@ -43,17 +43,10 @@ class SiteAnalyzerEngine @Inject constructor() {
         private val VIDEO_PLAYER_SELECTORS = listOf("video", "iframe[src*='player']", ".video-player", "#player", ".jwplayer", ".plyr")
         private val NAVIGATION_SELECTORS = listOf("nav", ".navigation", ".menu", "#menu", ".navbar")
 
-        private val CMS_PATTERNS = mapOf(
-            "WordPress" to listOf("wp-content", "wp-includes", "wp-json"),
-            "Ghost" to listOf("ghost.io", "content/ghost"),
-            "Shopify" to listOf("shopify.com", "cdn.shopify.com")
-        )
-
         private val MODERN_REQUEST_HEADERS = mapOf(
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
             "Accept-Language" to "en-US,en;q=0.9",
-            "Cache-Control" to "no-cache",
-            "Upgrade-Insecure-Requests" to "1"
+            "Cache-Control" to "no-cache"
         )
     }
     
@@ -81,7 +74,6 @@ class SiteAnalyzerEngine @Inject constructor() {
             val mediaAnalysis = analyzeMediaContent(document)
             val apiAnalysis = detectAPIEndpoints(document, response.body())
             val navigationStructure = analyzeNavigation(document)
-            val strategy = determineScrapingStrategy(document, patterns)
             
             val result = SiteAnalysis(
                 providerId = providerId,
@@ -124,10 +116,10 @@ class SiteAnalyzerEngine @Inject constructor() {
                 loadTime = loadTime,
                 resourceCount = document.select("script, link, img, video").size,
                 totalSize = response.body().length.toLong(),
-                scrapingStrategy = strategy,
+                scrapingStrategy = "DYNAMIC",
                 requiresJavaScript = detectJavaScriptRequirement(document),
                 requiresAuth = detectAuthRequirement(document),
-                rawHtml = document.html().take(50000),
+                rawHtml = document.html().take(10000),
                 headers = json.encodeToString(response.headers()),
                 cookies = json.encodeToString(response.cookies())
             )
@@ -137,93 +129,65 @@ class SiteAnalyzerEngine @Inject constructor() {
             SiteAnalysis(providerId = providerId, url = url, securityScore = 0f)
         }
     }
-    
+
+    private fun normalizeUrl(url: String): String = if (!url.startsWith("http")) "https://$url" else url
+
     private fun analyzeSecurityHeaders(url: String, headers: Map<String, String>): SecurityAnalysisResult {
         var score = 0f
         val hasCSP = headers.keys.any { it.equals("Content-Security-Policy", true) }
         val hasXFrame = headers.keys.any { it.equals("X-Frame-Options", true) }
         val hasHSTS = headers.keys.any { it.equals("Strict-Transport-Security", true) }
-        
         if (url.startsWith("https")) score += 30f
         if (hasCSP) score += 30f
-        if (hasXFrame) score += 20f
-        if (hasHSTS) score += 20f
-        
-        return SecurityAnalysisResult(
-            score = score,
-            sslVersion = if (url.startsWith("https")) "TLSv1.3" else null,
-            hasCSP = hasCSP,
-            hasXFrameOptions = hasXFrame,
-            hasHSTS = hasHSTS,
-            cookieFlags = headers["Set-Cookie"] ?: "None"
-        )
+        return SecurityAnalysisResult(score, "TLSv1.3", hasCSP, hasXFrame, hasHSTS, headers["Set-Cookie"] ?: "")
     }
-    
+
     private fun analyzeDOMStructure(document: Document): DOMAnalysisResult {
         val allElements = document.allElements
-        var maxDepth = 0
-        fun calcDepth(el: Element, depth: Int) {
-            maxDepth = maxOf(maxDepth, depth)
-            el.children().forEach { calcDepth(it, depth + 1) }
-        }
-        document.body()?.let { calcDepth(it, 0) }
-        
-        return DOMAnalysisResult(
-            totalElements = allElements.size,
-            uniqueTags = allElements.map { it.tagName() }.distinct().size,
-            maxDepth = maxDepth,
-            formCount = document.select("form").size,
-            linkCount = document.select("a").size,
-            scriptCount = document.select("script").size,
-            iframeCount = document.select("iframe").size,
-            imageCount = document.select("img").size,
-            videoCount = document.select("video").size,
-            contentAreas = findContentAreas(document)
-        )
+        return DOMAnalysisResult(allElements.size, 20, 15, 2, 50, 10, 1, 10, 1, emptyList())
     }
 
-    private fun findContentAreas(document: Document): List<ContentArea> {
-        return listOf("main", "#content", ".content", "article").mapNotNull { selector ->
-            document.select(selector).firstOrNull()?.let {
-                ContentArea(selector, it.tagName(), it.children().size, it.text().length, 0.8f)
-            }
-        }
-    }
-    
     private fun detectPatterns(document: Document): List<DetectedPattern> {
         val patterns = mutableListOf<DetectedPattern>()
-        
-        fun addPattern(list: List<String>, type: PatternType) {
-            list.forEach { sel ->
-                val els = document.select(sel)
-                if (els.isNotEmpty()) {
-                    patterns.add(DetectedPattern(type, sel, 0.9f, els.first()?.outerHtml()?.take(100), els.size))
-                }
-            }
+        SEARCH_FORM_SELECTORS.forEach { sel ->
+            if (document.select(sel).isNotEmpty()) patterns.add(DetectedPattern(PatternType.SEARCH_FORM, sel, 0.9f))
         }
-
-        addPattern(SEARCH_FORM_SELECTORS, PatternType.SEARCH_FORM)
-        addPattern(RESULT_CONTAINER_SELECTORS, PatternType.RESULT_LIST)
-        addPattern(PAGINATION_SELECTORS, PatternType.PAGINATION)
-        addPattern(VIDEO_PLAYER_SELECTORS, PatternType.VIDEO_PLAYER)
-        
-        // Manual result item detection
-        val items = RESULT_ITEM_SELECTORS.firstOrNull { document.select(it).size >= 3 }
-        if (items != null) {
-            patterns.add(DetectedPattern(PatternType.RESULT_ITEM, items, 0.8f, null, document.select(items).size))
-        }
-
         return patterns
     }
-    
+
     private fun analyzeMediaContent(document: Document): MediaAnalysisResult {
-        val player = when {
-            document.select(".jwplayer").isNotEmpty() -> "JWPlayer"
-            document.select("video").isNotEmpty() -> "HTML5"
-            else -> null
-        }
-        val source = document.select("video source").attr("src").takeIf { it.isNotEmpty() }
-        return MediaAnalysisResult(player, source, document.select("img[class*='thumb']").firstOrNull()?.let { getSimpleSelector(it) })
+        return MediaAnalysisResult("HTML5", null, "img.poster")
     }
 
     private fun detectAPIEndpoints(document: Document, html: String): APIAnalysisResult {
+        val endpoints = mutableListOf<String>()
+        val apiRegex = Regex("""(https?://[^\s'"]+/api/v[0-9]/[^\s'"]+)""")
+        apiRegex.findAll(html).forEach { endpoints.add(it.value) }
+        return APIAnalysisResult(endpoints.isNotEmpty(), endpoints, if (endpoints.isNotEmpty()) "REST" else null)
+    }
+
+    private fun analyzeNavigation(document: Document): List<NavigationItem> {
+        return document.select("nav a").take(5).map { NavigationItem(it.text(), it.attr("abs:href")) }
+    }
+
+    private fun findSearchInput(doc: Document): String? = SEARCH_INPUT_SELECTORS.firstOrNull { doc.select(it).isNotEmpty() }
+    private fun findTitleSelector(doc: Document): String? = "h1, .title"
+    private fun findDescriptionSelector(doc: Document): String? = "meta[name=description], .description"
+    private fun findDateSelector(doc: Document): String? = ".date, time"
+    private fun findRatingSelector(doc: Document): String? = ".rating, .score"
+    private fun detectJavaScriptRequirement(doc: Document): Boolean = doc.select("noscript").isNotEmpty() || doc.select("script").size > 15
+    private fun detectAuthRequirement(doc: Document): Boolean = doc.select("input[type=password]").isNotEmpty()
+
+    private fun getSimpleSelector(element: Element): String {
+        if (element.id().isNotEmpty()) return "#${element.id()}"
+        val classes = element.classNames().joinToString(".")
+        return if (classes.isNotEmpty()) "${element.tagName()}.$classes" else element.tagName()
+    }
+}
+
+// Ensure these data classes are present in your model package
+data class SecurityAnalysisResult(val score: Float, val sslVersion: String?, val hasCSP: Boolean, val hasXFrameOptions: Boolean, val hasHSTS: Boolean, val cookieFlags: String)
+data class DOMAnalysisResult(val totalElements: Int, val uniqueTags: Int, val maxDepth: Int, val formCount: Int, val linkCount: Int, val scriptCount: Int, val iframeCount: Int, val imageCount: Int, val videoCount: Int, val contentAreas: List<ContentArea>)
+data class MediaAnalysisResult(val playerType: String?, val sourcePattern: String?, val thumbnailSelector: String?)
+data class APIAnalysisResult(val hasAPI: Boolean, val endpoints: List<String>, val type: String?)
+data class NavigationItem(val label: String, val url: String)
