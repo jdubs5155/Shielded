@@ -61,6 +61,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    // Extended icon set — used across SearchScreen, SettingsScreen, ProvidersScreen
+    // (Download, Pause, Delete, BugReport, Pattern, Star, Analytics, etc.).
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
     // Hilt Dependency Injection

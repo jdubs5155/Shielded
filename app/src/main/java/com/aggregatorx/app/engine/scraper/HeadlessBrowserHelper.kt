@@ -7,6 +7,7 @@ import android.os.Looper
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.aggregatorx.app.engine.auth.TokenStore
 import com.aggregatorx.app.engine.util.EngineUtils
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
@@ -50,7 +51,8 @@ data class HeadlessExtraction(
  */
 @Singleton
 class HeadlessBrowserHelper @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val tokenStore: TokenStore
 ) {
 
     private var webView: WebView? = null
@@ -153,6 +155,11 @@ class HeadlessBrowserHelper @Inject constructor(
         val html    = withTimeoutOrNull(EXTRACTION_TIMEOUT_MS) { htmlD.await() } ?: ""
         val sources = withTimeoutOrNull(EXTRACTION_TIMEOUT_MS) { sourcesD.await() } ?: emptyList()
         val tokens  = withTimeoutOrNull(EXTRACTION_TIMEOUT_MS) { tokensD.await() } ?: emptyMap()
+
+        // Auto-feed everything we found into the TokenStore. The store
+        // dedupes / decodes / scores, so it's safe to call eagerly.
+        if (tokens.isNotEmpty())   tokenStore.recordCapturedHeaders(url, tokens)
+        if (html.isNotEmpty())     tokenStore.recordCapturedTokens(url, html)
 
         HeadlessExtraction(html = html, videoSources = sources, tokens = tokens)
     }

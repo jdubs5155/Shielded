@@ -1,6 +1,8 @@
 package com.aggregatorx.app.di
 
 import com.aggregatorx.app.data.database.AuditLogDao
+import com.aggregatorx.app.engine.auth.TokenInjectorInterceptor
+import com.aggregatorx.app.engine.auth.TokenStore
 import com.aggregatorx.app.engine.network.AuditInterceptor
 import com.aggregatorx.app.engine.network.ProxyVPNEngine
 import com.aggregatorx.app.engine.util.EngineUtils
@@ -35,14 +37,19 @@ object NetworkModule {
     @Singleton
     fun provideOkHttpClient(
         auditLogDao: AuditLogDao,
-        proxyEngine: ProxyVPNEngine
+        proxyEngine: ProxyVPNEngine,
+        tokenStore: TokenStore
     ): OkHttpClient {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.HEADERS
         }
 
         val builder = OkHttpClient.Builder()
+            // Order matters: stealth headers first (UA / geo) → token injection
+            // (so the captured Authorization is layered on top of the stealth
+            // request) → human delay → logging → audit (last, sees final state).
             .addInterceptor(StealthInterceptor(proxyEngine))
+            .addInterceptor(TokenInjectorInterceptor(tokenStore))
             .addInterceptor(HumanDelayInterceptor())
             .addInterceptor(loggingInterceptor)
             .addInterceptor(AuditInterceptor(auditLogDao))

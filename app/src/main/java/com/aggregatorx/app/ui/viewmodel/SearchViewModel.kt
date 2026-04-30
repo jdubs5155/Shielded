@@ -7,6 +7,7 @@ import com.aggregatorx.app.data.model.ResultItem
 import com.aggregatorx.app.data.repository.AggregatorRepository
 import com.aggregatorx.app.data.repository.PageDirection
 import com.aggregatorx.app.engine.ai.NLPQueryEngine
+import com.aggregatorx.app.engine.ai.SmartQueryEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +19,7 @@ import javax.inject.Inject
 class SearchViewModel @Inject constructor(
     private val repository: AggregatorRepository,
     private val nlpEngine: NLPQueryEngine,
+    private val smartQueryEngine: SmartQueryEngine,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -89,6 +91,31 @@ class SearchViewModel @Inject constructor(
             val direction = if (isForward) PageDirection.FORWARD else PageDirection.BACK
             repository.loadMore(providerName, direction)
             syncProviderPage(providerName)
+        }
+    }
+
+    /**
+     * Smart auto-search: lets the user kick off a scrape without typing
+     * anything. Picks a query from [SmartQueryEngine] (liked items →
+     * cached titles → seed list) and runs it like a normal search.
+     *
+     * Used by the "✨ Smart test" button on SearchScreen and by the
+     * empty-state if the user opens the app cold with no history.
+     */
+    fun runSmartTestSearch() {
+        viewModelScope.launch {
+            val q = smartQueryEngine.nextQuery()
+            if (q.isNotBlank()) {
+                savedStateHandle[KEY_QUERY] = q
+                repository.performSearch(q)
+
+                _providerPages.value = emptyMap()
+                savedStateHandle[KEY_PAGES] = _providerPages.value
+
+                repository.getProviders().first().forEach { provider ->
+                    observeProvider(provider.name)
+                }
+            }
         }
     }
 

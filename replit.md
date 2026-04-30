@@ -55,6 +55,38 @@ builds happen in GitHub Actions.
 - `TokenAnalyzer` decodes JWTs (header/payload/exp/scope) and scores reuse
   potential.
 
+### Token auto-injection (NEW)
+- New `auth_tokens` table (DB v3, `MIGRATION_2_3`) backed by `AuthTokenDao`.
+- `TokenStore` (singleton): per-host in-memory cache of captured tokens with
+  lifecycle states UNTESTED → ACTIVE / FAILED / EXPIRED. Exposes
+  `bestTokenForHost(host)` to the OkHttp interceptor.
+- `TokenInjectorInterceptor` is wired into the global OkHttp client. It picks
+  the best captured token for the request's host, injects it as
+  `Authorization: Bearer <value>` (or under whatever header the token was
+  captured with), and reports success / failure back so failed tokens get
+  evicted automatically.
+- `HeadlessBrowserHelper` now feeds every captured tokens map AND the raw
+  HTML (for JWT regex sweeps) into `TokenStore` after each navigation.
+
+### Smart test queries (NEW)
+- `SmartQueryEngine` synthesizes a search query from (1) the user's liked
+  titles, (2) recently cached titles, (3) a built-in seed list — so the
+  app can run a meaningful scrape on a cold install.
+- `SearchViewModel.runSmartTestSearch()` triggers it. The "Smart test
+  search" button on the Search screen fires it.
+
+### Downloads UI (NEW)
+- `DownloadsViewModel` exposes `MediaDownloadManager.downloads` plus
+  `enqueue / pause / resume / remove` callbacks.
+- `DownloadsScreen` renders a live list with progress bars + per-row
+  controls. Reachable from the new bottom nav bar in `MainActivity`.
+- Each result row in `SearchScreen` now has a Download icon that
+  enqueues the row's video URL into the manager.
+
+### Bottom navigation
+- `MainActivity` now wraps the `NavHost` in a `Scaffold` with a
+  `NavigationBar`. Two destinations: `search` (default) and `downloads`.
+
 ### Build (Req 6)
 - `app/build.gradle.kts` adds: media3-database, media3-datasource,
   lifecycle-viewmodel-savedstate, lifecycle-viewmodel-compose,
@@ -72,8 +104,20 @@ builds happen in GitHub Actions.
 
 ## Where the GGUF lives
 
-Real weights aren't bundled. Drop the file at:
-`app/src/main/assets/models/dolphin-3.0-llama3.1-8b.Q4_K_M.gguf`
+Real weights aren't bundled. **All you need to do is drop the file at:**
+
+```
+app/src/main/assets/models/dolphin-3.0-llama3.1-8b.Q4_K_M.gguf
+```
+
+The exact filename is enforced by `LlamaCppBridge.MODEL_ASSET_NAME`. On first
+init the file is staged from `assets/` into the app's private `filesDir/` so
+llama.cpp's mmap loader can open it by absolute path. No code changes needed.
 
 If the native libs / model are absent the app still runs — `LlamaCppBridge.isAvailable()`
-returns false and `NLPQueryEngine` uses simple keyword-frequency fallbacks.
+returns false and the AI features fall back automatically:
+
+  - `NLPQueryEngine.rewriteQuery()` returns the original query.
+  - `NLPQueryEngine.startRefinementLoop()` falls back to keyword frequency.
+  - `SmartQueryEngine` still works — it doesn't depend on the LLM.
+  - `TokenStore` still captures, injects, tests and evicts tokens.

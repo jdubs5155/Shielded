@@ -2,6 +2,7 @@ package com.aggregatorx.app.data.database
 
 import androidx.room.*
 import com.aggregatorx.app.data.model.AuditLogEntity
+import com.aggregatorx.app.data.model.AuthTokenEntity
 import com.aggregatorx.app.data.model.ProviderEntity
 import com.aggregatorx.app.data.model.ResultItem
 import kotlinx.coroutines.flow.Flow
@@ -79,4 +80,26 @@ interface AuditLogDao {
 
     @Query("DELETE FROM audit_logs WHERE timestamp < :expiry")
     suspend fun clearOldLogs(expiry: Long)
+}
+
+@Dao
+interface AuthTokenDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(token: AuthTokenEntity)
+
+    @Query("SELECT * FROM auth_tokens WHERE host = :host AND status IN ('UNTESTED','ACTIVE') ORDER BY successCount DESC, firstSeenAt DESC")
+    suspend fun getUsableForHost(host: String): List<AuthTokenEntity>
+
+    @Query("SELECT * FROM auth_tokens ORDER BY firstSeenAt DESC")
+    fun observeAll(): Flow<List<AuthTokenEntity>>
+
+    @Query("UPDATE auth_tokens SET status = :status, successCount = successCount + :successDelta, failureCount = failureCount + :failureDelta, lastUsedAt = :lastUsedAt WHERE id = :id")
+    suspend fun updateStatus(id: String, status: String, successDelta: Int, failureDelta: Int, lastUsedAt: Long)
+
+    @Query("DELETE FROM auth_tokens WHERE id = :id")
+    suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM auth_tokens WHERE status IN ('FAILED','EXPIRED')")
+    suspend fun purgeUnusable()
 }
