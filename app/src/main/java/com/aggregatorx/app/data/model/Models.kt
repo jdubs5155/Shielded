@@ -1,6 +1,8 @@
 package com.aggregatorx.app.data.model
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
 import java.util.UUID
@@ -31,20 +33,24 @@ data class Provider(
 
 @Serializable
 enum class ProviderCategory {
-    GENERAL,
-    STREAMING,
-    TORRENT,
-    NEWS,
-    SOCIAL,
-    MEDIA,
-    API_BASED,
-    CUSTOM
+    GENERAL, STREAMING, TORRENT, NEWS, SOCIAL, MEDIA, API_BASED, CUSTOM
 }
 
 /**
  * Site Analysis Result - Complete analysis of a website's structure
  */
-@Entity(tableName = "site_analysis")
+@Entity(
+    tableName = "site_analysis",
+    foreignKeys = [
+        ForeignKey(
+            entity = Provider::class,
+            parentColumns = ["id"],
+            childColumns = ["providerId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["providerId"])]
+)
 @Serializable
 data class SiteAnalysis(
     @PrimaryKey
@@ -74,9 +80,9 @@ data class SiteAnalysis(
     val videoCount: Int = 0,
     
     // Pattern Detection
-    val detectedPatterns: String = "[]", // JSON array of patterns
+    val detectedPatterns: String = "[]", // JSON array
     val navigationStructure: String = "{}", // JSON object
-    val contentAreas: String = "[]", // JSON array of content selectors
+    val contentAreas: String = "[]", // JSON array
     val searchFormSelector: String? = null,
     val searchInputSelector: String? = null,
     val resultContainerSelector: String? = null,
@@ -94,8 +100,8 @@ data class SiteAnalysis(
     
     // API Detection
     val hasAPI: Boolean = false,
-    val apiEndpoints: String = "[]", // JSON array
-    val apiType: String? = null, // REST, GraphQL, etc.
+    val apiEndpoints: String = "[]", 
+    val apiType: String? = null, 
     
     // Performance Metrics
     val loadTime: Long = 0L,
@@ -106,27 +112,22 @@ data class SiteAnalysis(
     val scrapingStrategy: ScrapingStrategy = ScrapingStrategy.HTML_PARSING,
     val requiresJavaScript: Boolean = false,
     val requiresAuth: Boolean = false,
-    val rateLimit: Int = 10, // requests per minute
+    val rateLimit: Int = 10,
     val retryCount: Int = 3,
     
     // Raw data
     val rawHtml: String? = null,
-    val headers: String = "{}", // JSON object
-    val cookies: String = "[]" // JSON array
+    val headers: String = "{}",
+    val cookies: String = "[]"
 )
 
 @Serializable
 enum class ScrapingStrategy {
-    HTML_PARSING,      // Simple Jsoup parsing
-    DYNAMIC_CONTENT,   // Requires JavaScript execution
-    API_BASED,         // Direct API calls
-    HYBRID,            // Combination of methods
-    HEADLESS_BROWSER,  // Full browser simulation
-    TAB_CRAWL          // Navigate/click category tabs when no search is available
+    HTML_PARSING, DYNAMIC_CONTENT, API_BASED, HYBRID, HEADLESS_BROWSER, TAB_CRAWL
 }
 
 /**
- * Search Result - Individual result from a provider
+ * Search Result - Individual result (Not an Entity, used for UI/Transfer)
  */
 @Serializable
 data class SearchResult(
@@ -152,9 +153,6 @@ data class SearchResult(
     val timestamp: Long = System.currentTimeMillis()
 )
 
-/**
- * Provider Search Results - Grouped results from a single provider
- */
 @Serializable
 data class ProviderSearchResults(
     val provider: Provider,
@@ -167,9 +165,6 @@ data class ProviderSearchResults(
     val nextPageUrl: String? = null
 )
 
-/**
- * Aggregated Search Results - All results from all providers
- */
 @Serializable
 data class AggregatedSearchResults(
     val query: String,
@@ -182,9 +177,6 @@ data class AggregatedSearchResults(
     val relatedResults: List<SearchResult> = emptyList()
 )
 
-/**
- * DOM Element Analysis
- */
 @Serializable
 data class DOMElement(
     val tag: String,
@@ -199,9 +191,6 @@ data class DOMElement(
     val isContentContainer: Boolean = false
 )
 
-/**
- * Pattern Detection Result
- */
 @Serializable
 data class DetectedPattern(
     val type: PatternType,
@@ -213,44 +202,34 @@ data class DetectedPattern(
 
 @Serializable
 enum class PatternType {
-    SEARCH_FORM,
-    RESULT_LIST,
-    RESULT_ITEM,
-    PAGINATION,
-    VIDEO_PLAYER,
-    VIDEO_LIST,
-    NAVIGATION,
-    SIDEBAR,
-    FOOTER,
-    HEADER,
-    CONTENT_AREA,
-    THUMBNAIL_GRID,
-    CARD_LAYOUT,
-    TABLE_LAYOUT,
-    INFINITE_SCROLL,
-    LOAD_MORE_BUTTON,
-    FILTER_PANEL,
-    SORT_OPTIONS,
-    CATEGORY_LIST,
-    TAG_CLOUD,
-    RATING_SYSTEM,
-    COMMENT_SECTION,
-    RELATED_CONTENT,
-    ADVERTISEMENT,
-    LOGIN_FORM,
-    API_ENDPOINT
+    SEARCH_FORM, RESULT_LIST, RESULT_ITEM, PAGINATION, VIDEO_PLAYER, VIDEO_LIST,
+    NAVIGATION, SIDEBAR, FOOTER, HEADER, CONTENT_AREA, THUMBNAIL_GRID,
+    CARD_LAYOUT, TABLE_LAYOUT, INFINITE_SCROLL, LOAD_MORE_BUTTON, FILTER_PANEL,
+    SORT_OPTIONS, CATEGORY_LIST, TAG_CLOUD, RATING_SYSTEM, COMMENT_SECTION,
+    RELATED_CONTENT, ADVERTISEMENT, LOGIN_FORM, API_ENDPOINT
 }
 
 /**
  * Scraping Configuration for a specific provider
  */
-@Entity(tableName = "scraping_configs")
+@Entity(
+    tableName = "scraping_configs",
+    foreignKeys = [
+        ForeignKey(
+            entity = Provider::class,
+            parentColumns = ["id"],
+            childColumns = ["providerId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["providerId"])]
+)
 @Serializable
 data class ScrapingConfig(
     @PrimaryKey
     val id: String = UUID.randomUUID().toString(),
     val providerId: String,
-    val searchUrlTemplate: String, // e.g., "{baseUrl}/search?q={query}&page={page}"
+    val searchUrlTemplate: String,
     val resultSelector: String,
     val titleSelector: String,
     val urlSelector: String,
@@ -263,20 +242,17 @@ data class ScrapingConfig(
     val ratingSelector: String? = null,
     val categorySelector: String? = null,
     val nextPageSelector: String? = null,
-    val headers: String = "{}", // JSON object of custom headers
-    val cookies: String = "{}", // JSON object of cookies
-    val postData: String? = null, // For POST requests
+    val headers: String = "{}",
+    val cookies: String = "{}",
+    val postData: String? = null,
     val encoding: String = "UTF-8",
-    val userAgent: String = com.aggregatorx.app.engine.util.EngineUtils.DEFAULT_USER_AGENT,
+    val userAgent: String = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36", 
     val timeout: Int = 30000,
     val retryCount: Int = 3,
     val retryDelay: Long = 1000,
     val rateLimitMs: Long = 500
 )
 
-/**
- * Search History Entry
- */
 @Entity(tableName = "search_history")
 @Serializable
 data class SearchHistoryEntry(
@@ -289,28 +265,19 @@ data class SearchHistoryEntry(
     val successfulProviders: Int = 0
 )
 
-/**
- * User Preferences - Tracks user behavior for intelligent suggestions
- * When no results found for query, uses these preferences to suggest content
- */
 @Entity(tableName = "user_preferences")
 @Serializable
 data class UserPreferences(
     @PrimaryKey
-    val id: Int = 1, // Single row for user preferences
-    val clickedCategories: String = "[]", // JSON array of clicked categories
-    val watchedGenres: String = "[]", // JSON array of watched genres
-    val preferredQualities: String = "[\"1080p\", \"720p\"]", // JSON array of preferred qualities
-    val recentClicks: String = "[]", // JSON array of recently clicked items
-    val favoriteProviders: String = "[]", // JSON array of favorite provider IDs
+    val id: Int = 1,
+    val clickedCategories: String = "[]",
+    val watchedGenres: String = "[]",
+    val preferredQualities: String = "[\"1080p\", \"720p\"]",
+    val recentClicks: String = "[]",
+    val favoriteProviders: String = "[]",
     val lastUpdated: Long = System.currentTimeMillis()
 )
 
-/**
- * Liked Result - Tracks individual results the user has liked/thumbs-up'd.
- * The learning system analyses these to discover user preferences over time
- * and boost similar content in the Top Results list.
- */
 @Entity(tableName = "liked_results")
 @Serializable
 data class LikedResult(
@@ -327,32 +294,30 @@ data class LikedResult(
     val seeders: Int? = null,
     val rating: Float? = null,
     val likedAt: Long = System.currentTimeMillis(),
-    // Extracted keywords from title for preference learning
-    val titleKeywords: String = "[]" // JSON array of lowercase keywords
+    val titleKeywords: String = "[]"
 )
 
-/**
- * Learned User Profile - Aggregated preference model built from liked results.
- * Updated periodically as the user likes more content.
- */
 @Entity(tableName = "learned_profile")
 @Serializable
 data class LearnedUserProfile(
     @PrimaryKey
-    val id: Int = 1, // Single row
-    val preferredKeywords: String = "", // Serialised: "key:0.5;key2:1.0"
+    val id: Int = 1,
+    val preferredKeywords: String = "",
     val preferredProviders: String = "",
     val preferredCategories: String = "",
     val preferredQualities: String = "",
     val totalLikes: Int = 0,
     val lastUpdated: Long = System.currentTimeMillis()
 ) {
-    /** Parse "key:weight;key2:weight" into a Map<String, Float> */
     private fun parseWeightMap(raw: String): Map<String, Float> {
         if (raw.isBlank()) return emptyMap()
         return raw.split(";").mapNotNull { entry ->
             val parts = entry.split(":", limit = 2)
-            if (parts.size == 2) parts[0] to (parts[1].toFloatOrNull() ?: 0f) else null
+            if (parts.size == 2) {
+                val key = parts[0].trim()
+                val weight = parts[1].toFloatOrNull() ?: 0f
+                if (key.isNotEmpty()) key to weight else null
+            } else null
         }.toMap()
     }
 
