@@ -3,6 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("kotlin-kapt")
     id("com.google.dagger.hilt.android")
+    // Fix: Required for Kotlin 2.0+
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -41,9 +43,8 @@ android {
     buildFeatures {
         compose = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1"
-    }
+    // Fix: Removed composeOptions block as it's now handled by the plugin above
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -61,8 +62,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    // Extended icon set — used across SearchScreen, SettingsScreen, ProvidersScreen
-    // (Download, Pause, Delete, BugReport, Pattern, Star, Analytics, etc.).
+    
+    // Icons & Navigation
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
@@ -77,7 +78,7 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion")
     kapt("androidx.room:room-compiler:$roomVersion")
 
-    // Media3 - Video Playback & Downloads
+    // Media3 - Video Playback & Downloads (Requirements 3 & 4)
     val media3Version = "1.3.1"
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
@@ -85,38 +86,29 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
     implementation("androidx.media3:media3-session:$media3Version")
     implementation("androidx.media3:media3-datasource-okhttp:$media3Version")
-    // Required by MediaDownloadManager (SimpleCache + StandaloneDatabaseProvider).
     implementation("androidx.media3:media3-database:$media3Version")
     implementation("androidx.media3:media3-datasource:$media3Version")
 
-    // Lifecycle: ViewModel + SavedStateHandle (used by SearchViewModel for
-    // state preservation across configuration changes / process death).
+    // Lifecycle & State Preservation (Requirement 1)
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
 
-    // Compose foundation (Box, BackgroundModifier) used by VideoPlayerActivity.
+    // UI Foundation
     implementation("androidx.compose.foundation:foundation")
 
-    // Jsoup is used to parse already-rendered HTML returned by the WebView
-    // (we don't fetch with it — fetch goes through the HeadlessBrowserHelper).
+    // Scraping & Web (Requirement 5 & 7)
     implementation("org.jsoup:jsoup:1.17.2")
-
-    // JSON helper used by the JS bridge in HeadlessBrowserHelper (org.json
-    // is part of the Android platform; no extra dep required).
-
-    // Headless Scraping Upgrade
     implementation("androidx.webkit:webkit:1.12.0")
 
-    // Networking, Anti-Detection & Proxy Support
+    // Networking & Proxy Support (Requirement 7)
     implementation(platform("com.squareup.okhttp3:okhttp-bom:4.12.0"))
     implementation("com.squareup.okhttp3:okhttp")
     implementation("com.squareup.okhttp3:logging-interceptor")
 
-    // Coil for UI Image Loading
+    // Image Loading
     implementation("io.coil-kt:coil-compose:2.6.0")
 
-    // Local LLM integration (llama.cpp / kotlinllamacpp bindings)
-    // Note: The quantized model will be placed in src/main/assets/
-    // Native bindings handled via standard JNI/AAR included in project
+    // Native / LLM support (Requirement 6)
+    // Quantized model GGUF files should be in src/main/assets/
 }
