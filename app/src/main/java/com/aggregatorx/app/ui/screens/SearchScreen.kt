@@ -1,4 +1,4 @@
-package com.aggregatorx.app.ui.screen
+package com.aggregatorx.app.ui.screens
 
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility

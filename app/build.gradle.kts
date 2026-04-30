@@ -82,6 +82,25 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
     implementation("androidx.media3:media3-session:$media3Version")
     implementation("androidx.media3:media3-datasource-okhttp:$media3Version")
+    // Required by MediaDownloadManager (SimpleCache + StandaloneDatabaseProvider).
+    implementation("androidx.media3:media3-database:$media3Version")
+    implementation("androidx.media3:media3-datasource:$media3Version")
+
+    // Lifecycle: ViewModel + SavedStateHandle (used by SearchViewModel for
+    // state preservation across configuration changes / process death).
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+
+    // Compose foundation (Box, BackgroundModifier) used by VideoPlayerActivity.
+    implementation("androidx.compose.foundation:foundation")
+
+    // Jsoup is used to parse already-rendered HTML returned by the WebView
+    // (we don't fetch with it — fetch goes through the HeadlessBrowserHelper).
+    implementation("org.jsoup:jsoup:1.17.2")
+
+    // JSON helper used by the JS bridge in HeadlessBrowserHelper (org.json
+    // is part of the Android platform; no extra dep required).
 
     // Headless Scraping Upgrade
     implementation("androidx.webkit:webkit:1.12.0")

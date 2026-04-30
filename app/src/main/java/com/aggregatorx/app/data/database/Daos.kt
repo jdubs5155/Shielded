@@ -1,14 +1,16 @@
 package com.aggregatorx.app.data.database
 
 import androidx.room.*
+import com.aggregatorx.app.data.model.AuditLogEntity
 import com.aggregatorx.app.data.model.ProviderEntity
 import com.aggregatorx.app.data.model.ResultItem
-import com.aggregatorx.app.data.model.AuditLogEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface AggregatorDao {
-    // Provider Operations
+
+    // ── Provider Operations ──────────────────────────────────────────────
+
     @Query("SELECT * FROM providers")
     fun getAllProviders(): Flow<List<ProviderEntity>>
 
@@ -24,15 +26,47 @@ interface AggregatorDao {
     @Update
     suspend fun updateProvider(provider: ProviderEntity)
 
-    // Result Operations
-    @Query("SELECT * FROM results WHERE providerName = :providerName")
+    /**
+     * Update only the pagination state of a provider. Avoids the read-modify-write
+     * round-trip done by `updateProvider` when only paging fields change.
+     */
+    @Query(
+        """
+        UPDATE providers
+        SET currentPage = :currentPage,
+            nextPageUrl = :nextPageUrl
+        WHERE name = :name
+        """
+    )
+    suspend fun updateProviderPagination(
+        name: String,
+        currentPage: Int,
+        nextPageUrl: String?
+    )
+
+    // ── Result Operations ────────────────────────────────────────────────
+
+    @Query("SELECT * FROM results WHERE providerName = :providerName ORDER BY timestamp DESC")
     fun getResultsByProvider(providerName: String): Flow<List<ResultItem>>
+
+    @Query("SELECT * FROM results WHERE providerName = :providerName ORDER BY timestamp DESC")
+    suspend fun getResultsByProviderOnce(providerName: String): List<ResultItem>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertResults(results: List<ResultItem>)
 
+    @Update
+    suspend fun updateResult(item: ResultItem)
+
     @Query("UPDATE results SET isLiked = :isLiked WHERE id = :id")
     suspend fun updateItemLikeStatus(id: String, isLiked: Boolean)
+
+    /**
+     * Replaces only the slice of results owned by a specific provider — used
+     * by per-provider pagination so other providers' results are untouched.
+     */
+    @Query("DELETE FROM results WHERE providerName = :providerName")
+    suspend fun clearResultsByProvider(providerName: String)
 }
 
 @Dao

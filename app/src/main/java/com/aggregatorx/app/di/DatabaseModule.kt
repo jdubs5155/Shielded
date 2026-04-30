@@ -24,7 +24,10 @@ object DatabaseModule {
             AggregatorDatabase::class.java,
             "aggregator_db"
         )
-        .fallbackToDestructiveMigration() // Note: Use migrations for production
+        .addMigrations(AggregatorDatabase.MIGRATION_1_2)
+        // Safety net: if a future schema bump lacks an explicit migration we
+        // prefer dropping local data over crashing the app.
+        .fallbackToDestructiveMigration()
         .build()
     }
 
