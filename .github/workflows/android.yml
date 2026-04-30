@@ -1,101 +1,27 @@
-name: Android Build
+name: Android CI
 
 on:
   push:
-    branches: [ main, develop ]
-    tags:
-      - 'v*'
+    branches: [ "main" ]
   pull_request:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: [ "main" ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-    - name: Set up JDK 17
+    - name: set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
         cache: gradle
 
-    - name: Set up Android SDK
-      uses: android-actions/setup-android@v3
-
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug --stacktrace
-
-    - name: Build Release APK
-      run: ./gradlew assembleRelease --stacktrace
-
-    - name: Upload Debug APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: AggregatorX-debug
-        path: app/build/outputs/apk/debug/*.apk
-        retention-days: 30
-
-    - name: Upload Release APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: AggregatorX-release
-        path: app/build/outputs/apk/release/*.apk
-        retention-days: 90
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: gradle
-
-    - name: Set up Android SDK
-      uses: android-actions/setup-android@v3
-
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-
-    - name: Build Release APK
-      run: ./gradlew assembleRelease --stacktrace
-
-    - name: Get version from tag
-      id: get_version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: app/build/outputs/apk/release/*.apk
-        name: Release v${{ steps.get_version.outputs.VERSION }}
-        body: |
-          ## AggregatorX v${{ steps.get_version.outputs.VERSION }}
-          
-          ### Features
-          - 🌙 **Pastel Dark Theme** - Easy on eyes with soft, muted colors
-          - 🖱️ **Auto-Click Ad Bypass** - Automatically dismisses popups and ads
-          - 🔍 **AI-Powered Scraping** - Smart content extraction
-          - 📱 **Modern Material3 UI** - Beautiful Jetpack Compose interface
-          
-          ### Download
-          Download the APK file below and install on your Android device.
-        draft: false
-        prerelease: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Build with Gradle
+      run: ./gradlew assembleDebug
