@@ -2,7 +2,9 @@ package com.aggregatorx.app.di
 
 import android.content.Context
 import androidx.room.Room
-import com.aggregatorx.app.data.database.*
+import com.aggregatorx.app.data.database.AggregatorDao
+import com.aggregatorx.app.data.database.AggregatorDatabase
+import com.aggregatorx.app.data.database.AuditLogDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -13,51 +15,22 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
-    
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AggregatorDatabase {
         return Room.databaseBuilder(
             context,
             AggregatorDatabase::class.java,
-            "aggregator_database"
+            "aggregator_db"
         )
-        .fallbackToDestructiveMigration(dropAllTables = true)
+        .fallbackToDestructiveMigration() // Note: Use migrations for production
         .build()
     }
-    
+
     @Provides
-    fun provideProviderDao(database: AggregatorDatabase): ProviderDao {
-        return database.providerDao()
-    }
-    
+    fun provideAggregatorDao(db: AggregatorDatabase): AggregatorDao = db.aggregatorDao()
+
     @Provides
-    fun provideSiteAnalysisDao(database: AggregatorDatabase): SiteAnalysisDao {
-        return database.siteAnalysisDao()
-    }
-    
-    @Provides
-    fun provideScrapingConfigDao(database: AggregatorDatabase): ScrapingConfigDao {
-        return database.scrapingConfigDao()
-    }
-    
-    @Provides
-    fun provideSearchHistoryDao(database: AggregatorDatabase): SearchHistoryDao {
-        return database.searchHistoryDao()
-    }
-    
-    @Provides
-    fun provideUserPreferencesDao(database: AggregatorDatabase): UserPreferencesDao {
-        return database.userPreferencesDao()
-    }
-    
-    @Provides
-    fun provideLikedResultDao(database: AggregatorDatabase): LikedResultDao {
-        return database.likedResultDao()
-    }
-    
-    @Provides
-    fun provideLearnedProfileDao(database: AggregatorDatabase): LearnedProfileDao {
-        return database.learnedProfileDao()
-    }
+    fun provideAuditLogDao(db: AggregatorDatabase): AuditLogDao = db.auditLogDao()
 }
