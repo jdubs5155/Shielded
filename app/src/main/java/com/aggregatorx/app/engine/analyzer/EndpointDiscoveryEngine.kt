@@ -275,60 +275,21 @@ class EndpointDiscoveryEngine @Inject constructor(
     ): List<String> = withContext(Dispatchers.IO) {
         val discovered = mutableListOf<String>()
         try {
-            val page = HeadlessBrowserHelper.createAntiDetectionPage()
-            val capturedUrls = mutableListOf<String>()
-
-            // Intercept all outgoing requests
-            page.onRequest { request ->
-                val reqUrl = request.url()
-                val resourceType = request.resourceType()
-                if (resourceType in listOf("xhr", "fetch") ||
-                    reqUrl.contains("/api/") ||
-                    reqUrl.contains("/ajax/") ||
-                    reqUrl.contains("/graphql") ||
-                    reqUrl.contains("search") ||
-                    reqUrl.contains(".json")) {
-                    capturedUrls.add(reqUrl)
-                }
-            }
-
-            // Navigate and let JS execute
-            page.navigate(baseUrl, com.microsoft.playwright.Page.NavigateOptions().setTimeout(DISCOVERY_TIMEOUT.toDouble()))
-            page.waitForLoadState(com.microsoft.playwright.options.LoadState.NETWORKIDLE,
-                com.microsoft.playwright.Page.WaitForLoadStateOptions().setTimeout(DISCOVERY_TIMEOUT.toDouble()))
-
-            // Try typing into search input if one exists
-            try {
-                val searchInputSelectors = listOf(
-                    "input[type='search']", "input[name='q']", "input[name='query']",
-                    "input[name='search']", "input[placeholder*='search' i]",
-                    "input[placeholder*='Search' i]", "#search", ".search-input"
-                )
-                for (sel in searchInputSelectors) {
-                    val el = page.querySelector(sel)
-                    if (el != null && el.isVisible) {
-                        el.fill(sampleQuery)
-                        Thread.sleep(500) // wait for autosuggest/AJAX
-                        // Try pressing Enter
-                        try { el.press("Enter") } catch (_: Exception) {}
-                        Thread.sleep(1500) // wait for results AJAX
-                        break
-                    }
-                }
-            } catch (_: Exception) {}
-
-            page.close()
-
-            // Deduplicate and filter noise
-            discovered.addAll(
-                capturedUrls.distinct().filter { url ->
-                    !url.contains("analytics") && !url.contains("tracking") &&
+            val extraction = HeadlessBrowserHelper.navigateAndExtract(baseUrl)
+            val html = extraction.html
+            
+            // Extract URLs from the rendered HTML
+            val apiUrlPattern = Regex("""(https?://[^\s'"<>]+/(?:api|ajax|graphql)[^\s'"<>]*?)""")
+            apiUrlPattern.findAll(html).forEach { match ->
+                val url = match.groupValues[1]
+                if (!url.contains("analytics") && !url.contains("tracking") &&
                     !url.contains("pixel") && !url.contains("ads.") &&
                     !url.contains("doubleclick") && !url.contains("googlesyndication") &&
                     !url.contains("favicon") && !url.contains(".css") &&
-                    !url.contains(".png") && !url.contains(".jpg")
+                    !url.contains(".png") && !url.contains(".jpg")) {
+                    discovered.add(url)
                 }
-            )
+            }
         } catch (_: Exception) {}
         discovered
     }
