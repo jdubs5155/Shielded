@@ -39,7 +39,8 @@ class SettingsViewModel @Inject constructor(
             _uiState.update { it.copy(isAnalyzing = true, error = null) }
             
             try {
-                val (provider, analysis) = repository.analyzeNewUrl(url)
+                val result: Pair<Provider, SiteAnalysis> = repository.analyzeNewUrl(url)
+                val (provider, analysis) = result
                 _uiState.update { 
                     it.copy(
                         isAnalyzing = false,
@@ -120,4 +121,3 @@ class SettingsViewModel @Inject constructor(
         _uiState.update { it.copy(showAnalysisDetails = false) }
     }
 }
-
