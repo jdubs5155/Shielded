@@ -116,7 +116,7 @@ class SiteAnalyzerEngine @Inject constructor() {
                 loadTime = loadTime,
                 resourceCount = document.select("script, link, img, video").size,
                 totalSize = response.body().length.toLong(),
-                scrapingStrategy = "DYNAMIC",
+                scrapingStrategy = ScrapingStrategy.DYNAMIC_CONTENT,
                 requiresJavaScript = detectJavaScriptRequirement(document),
                 requiresAuth = detectAuthRequirement(document),
                 rawHtml = document.html().take(10000),
@@ -185,9 +185,9 @@ class SiteAnalyzerEngine @Inject constructor() {
     }
 }
 
-// Ensure these data classes are present in your model package
+// Data classes for site analysis results
 data class SecurityAnalysisResult(val score: Float, val sslVersion: String?, val hasCSP: Boolean, val hasXFrameOptions: Boolean, val hasHSTS: Boolean, val cookieFlags: String)
-data class DOMAnalysisResult(val totalElements: Int, val uniqueTags: Int, val maxDepth: Int, val formCount: Int, val linkCount: Int, val scriptCount: Int, val iframeCount: Int, val imageCount: Int, val videoCount: Int, val contentAreas: List<ContentArea>)
+data class DOMAnalysisResult(val totalElements: Int, val uniqueTags: Int, val maxDepth: Int, val formCount: Int, val linkCount: Int, val scriptCount: Int, val iframeCount: Int, val imageCount: Int, val videoCount: Int, val contentAreas: List<String>)
 data class MediaAnalysisResult(val playerType: String?, val sourcePattern: String?, val thumbnailSelector: String?)
 data class APIAnalysisResult(val hasAPI: Boolean, val endpoints: List<String>, val type: String?)
 data class NavigationItem(val label: String, val url: String)
