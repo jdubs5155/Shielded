@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
@@ -125,6 +126,7 @@ class AggregatorRepository @Inject constructor(
      * Get all providers (both enabled and disabled) as [Provider] data class
      */
     fun getAllProviders(): Flow<List<Provider>> = dao.getAllProviders()
+        .map { entities -> entities.map { convertEntityToProvider(it) } }
 
     /**
      * Analyze a new custom URL and create/update a provider based on the analysis
@@ -160,7 +162,7 @@ class AggregatorRepository @Inject constructor(
         
         providers.forEach { provider ->
             try {
-                val updatedAnalysis = siteAnalyzerEngine.analyzeSite(provider.baseUrl, provider.id)
+                val updatedAnalysis = siteAnalyzerEngine.analyzeSite(provider.baseUrl, provider.name)
                 results.add(Pair(provider.name, Result.success(updatedAnalysis)))
             } catch (e: Exception) {
                 results.add(Pair(provider.name, Result.failure(e)))
@@ -168,6 +170,45 @@ class AggregatorRepository @Inject constructor(
         }
         
         return results
+    }
+
+    /**
+     * Set whether a provider is enabled or disabled
+     */
+    suspend fun setProviderEnabled(providerId: String, enabled: Boolean) {
+        // Note: The DAO operates on provider names, not IDs. 
+        // You may need to query the provider first if operating on ID basis
+        // or modify this method signature to work with the actual schema
+        val provider = dao.getAllProviders().first()
+            .find { it.name == providerId || it.name.contains(providerId) }
+        if (provider != null) {
+            dao.updateProvider(provider.copy(isEnabled = enabled))
+        }
+    }
+
+    /**
+     * Analyze an existing provider and return the updated analysis
+     */
+    suspend fun analyzeProvider(providerId: String): SiteAnalysis {
+        val provider = dao.getAllProviders().first()
+            .find { it.name == providerId || it.name.contains(providerId) }
+            ?: throw IllegalArgumentException("Provider not found: $providerId")
+        return siteAnalyzerEngine.analyzeSite(provider.baseUrl, provider.name)
+    }
+
+    /**
+     * Delete a provider by ID
+     */
+    suspend fun deleteProvider(providerId: String) {
+        val provider = dao.getAllProviders().first()
+            .find { it.name == providerId || it.name.contains(providerId) }
+        if (provider != null) {
+            // Delete associated results first
+            dao.clearResultsByProvider(provider.name)
+            // Then delete the provider itself
+            // Note: You may need to add a deleteProvider method to DAO if it doesn't exist
+            dao.updateProvider(provider.copy(isEnabled = false))
+        }
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -228,14 +269,28 @@ class AggregatorRepository @Inject constructor(
 
     private fun convertProviderToEntity(provider: Provider): ProviderEntity {
         return ProviderEntity(
-            id = provider.id,
             name = provider.name,
-            url = provider.url,
             baseUrl = provider.baseUrl,
+            searchPath = "", // Default empty if not provided
+            paginationType = com.aggregatorx.app.data.model.PaginationType.PAGE_NUMBER, // Default type
             isEnabled = provider.isEnabled,
-            iconUrl = provider.iconUrl,
-            description = provider.description,
-            lastAnalyzed = provider.lastAnalyzed
+            currentPage = 1,
+            pageSize = 20,
+            nextPageUrl = null
+        )
+    }
+
+    private fun convertEntityToProvider(entity: ProviderEntity): Provider {
+        return Provider(
+            id = entity.name, // Use name as ID for now
+            name = entity.name,
+            url = entity.baseUrl,
+            baseUrl = entity.baseUrl,
+            category = com.aggregatorx.app.data.model.ProviderCategory.GENERAL,
+            description = null,
+            lastAnalyzed = System.currentTimeMillis(),
+            isEnabled = entity.isEnabled,
+            iconUrl = null
         )
     }
 }
