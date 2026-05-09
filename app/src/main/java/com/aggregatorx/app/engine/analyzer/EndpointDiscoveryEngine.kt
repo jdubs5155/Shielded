@@ -25,7 +25,7 @@ import javax.inject.Singleton
  * 4. GraphQL introspection detection
  * 5. OpenAPI/Swagger spec detection
  * 6. Pattern-based endpoint deduction from visible URLs
- * 7. Headless network interception (Playwright request capture)
+ * 7. Headless network interception (WebView request capture)
  * 8. Learning from past successes — avoids re-probing known-dead endpoints
  *
  * All discovered endpoints are cached per domain and shared with
@@ -33,7 +33,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class EndpointDiscoveryEngine @Inject constructor(
-    private val cloudflareBypassEngine: CloudflareBypassEngine
+    private val cloudflareBypassEngine: CloudflareBypassEngine,
+    private val headlessBrowserHelper: HeadlessBrowserHelper
 ) {
 
     companion object {
@@ -275,7 +276,7 @@ class EndpointDiscoveryEngine @Inject constructor(
     ): List<String> = withContext(Dispatchers.IO) {
         val discovered = mutableListOf<String>()
         try {
-            val extraction = HeadlessBrowserHelper.navigateAndExtract(baseUrl)
+            val extraction = headlessBrowserHelper.navigateAndExtract(baseUrl)
             val html = extraction.html
             
             // Extract URLs from the rendered HTML
@@ -291,7 +292,7 @@ class EndpointDiscoveryEngine @Inject constructor(
                 }
             }
         } catch (_: Exception) {}
-        discovered
+        discovered.distinct()
     }
 
     /**
