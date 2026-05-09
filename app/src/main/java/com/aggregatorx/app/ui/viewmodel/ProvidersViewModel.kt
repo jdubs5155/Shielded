@@ -25,7 +25,12 @@ class ProvidersViewModel @Inject constructor(
     
     fun toggleProvider(providerId: String, enabled: Boolean) {
         viewModelScope.launch {
-            repository.setProviderEnabled(providerId, enabled)
+            try {
+                repository.setProviderEnabled(providerId, enabled)
+                _uiState.update { it.copy(message = "Provider ${if (enabled) "enabled" else "disabled"}") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Toggle failed") }
+            }
         }
     }
     
